@@ -7,12 +7,12 @@ import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
-import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
 import java.util.List;
+import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/attendance")
-@CrossOrigin(origins = "*")
 public class AttendanceController {
 
     @Autowired
@@ -23,22 +23,27 @@ public class AttendanceController {
         return ResponseEntity.ok(attendanceService.getAllRecords());
     }
 
+    @GetMapping("/today")
+    public ResponseEntity<List<AttendanceRecord>> getTodayRecords() {
+        return ResponseEntity.ok(attendanceService.getTodayRecords());
+    }
+
     @GetMapping("/user/{userId}")
-    public ResponseEntity<List<AttendanceRecord>> getRecordsByUser(@PathVariable Long userId) {
+    public ResponseEntity<List<AttendanceRecord>> getRecordsByUser(@PathVariable UUID userId) {
         return ResponseEntity.ok(attendanceService.getRecordsByUser(userId));
     }
 
     @GetMapping("/between")
     public ResponseEntity<List<AttendanceRecord>> getRecordsBetween(
-            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime start,
-            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime end) {
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) OffsetDateTime start,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) OffsetDateTime end) {
         return ResponseEntity.ok(attendanceService.getRecordsBetween(start, end));
     }
 
     @PostMapping
     public ResponseEntity<AttendanceRecord> recordAttendance(
-            @RequestParam Long userId,
-            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime checkInTime,
+            @RequestParam UUID userId,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) OffsetDateTime checkInTime,
             @RequestParam String status,
             @RequestParam String method) {
         return ResponseEntity.ok(attendanceService.recordAttendance(userId, checkInTime, status, method));

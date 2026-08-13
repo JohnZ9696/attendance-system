@@ -1,358 +1,119 @@
-import React, { useEffect, useState } from 'react';
-import {
-  Plus,
-  Search,
-  Edit2,
-  Trash2,
-  Fingerprint,
-  Camera
-} from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { Camera, Edit2, Fingerprint, Plus, Search, Trash2, X } from 'lucide-react';
+import { apiClient } from '../api/client';
+import { Button, ErrorBanner, PageHeader, Panel } from '../components/ui';
+
+const emptyForm = { name: '', mssv: '', rfidUid: '', faceEmbedding: '' };
 
 export default function Users() {
   const [users, setUsers] = useState([]);
-  const [loading, setLoading] = useState(true);
   const [keyword, setKeyword] = useState('');
-  const [showAddForm, setShowAddForm] = useState(false);
+  const [form, setForm] = useState(emptyForm);
+  const [editingId, setEditingId] = useState(null);
+  const [showForm, setShowForm] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
 
-  const [newUser, setNewUser] = useState({
-    studentCode: '',
-    fullName: '',
-    rfidUid: '',
-    email: '',
-    parentPhone: '',
-    faceImage: null
-  });
+  const loadUsers = () => {
+    setLoading(true);
+    setError('');
+    apiClient.getUsers()
+      .then(setUsers)
+      .catch(() => setError('Không thể tải danh sách người dùng.'))
+      .finally(() => setLoading(false));
+  };
 
-  const handleAddUser = async (e) => {
-  e.preventDefault();
+  useEffect(loadUsers, []);
 
-  try {
-    const response = await fetch('http://localhost:8080/api/students', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify(newUser)
-    });
+  const openCreate = () => {
+    setEditingId(null);
+    setForm(emptyForm);
+    setShowForm(true);
+  };
 
-    if (!response.ok) {
-      throw new Error('Thêm sinh viên thất bại');
-    }
+  const openEdit = (user) => {
+    setEditingId(user.id);
+    setForm({ name: user.name || '', mssv: user.mssv || '', rfidUid: user.rfidUid || '', faceEmbedding: user.faceEmbedding || '' });
+    setShowForm(true);
+  };
 
-    const createdUser = await response.json();
+  const closeForm = () => {
+    setShowForm(false);
+    setEditingId(null);
+    setForm(emptyForm);
+  };
 
-    // Cập nhật bảng ngay lập tức
-    setUsers((prev) => [...prev, createdUser]);
-
-    // Đóng form
-    setShowAddForm(false);
-
-    // Reset form
-    setNewUser({
-      studentCode: '',
-      fullName: '',
-      rfidUid: '',
-      email: '',
-      parentPhone: '',
-      faceImage: null
-    });
-
-    alert('Thêm người dùng thành công!');
-  } catch (error) {
-    console.error(error);
-    alert('Không thể thêm người dùng');
-  }
-};
-
-  useEffect(() => {
-    fetch('http://localhost:8080/api/students')
-      .then((res) => {
-        if (!res.ok) {
-          throw new Error('Không thể lấy danh sách học sinh');
-        }
-        return res.json();
-      })
-      .then((data) => {
-        setUsers(data);
-      })
-      .catch((error) => {
-        console.error('Lỗi lấy dữ liệu:', error);
-      })
-      .finally(() => {
-        setLoading(false);
-      });
-  }, []);
-
-  const filteredUsers = users.filter((user) => {
-    const search = keyword.toLowerCase();
-
-    return (
-      user.studentCode?.toLowerCase().includes(search) ||
-      user.fullName?.toLowerCase().includes(search)
-    );
-  });
-
-  const handleDelete = async (id) => {
-    const confirmDelete = window.confirm(
-      'Bạn có chắc muốn xóa người dùng này không?'
-    );
-
-
-    if (!confirmDelete) return;
-
+  const handleSubmit = async (event) => {
+    event.preventDefault();
+    setSaving(true);
+    setError('');
     try {
-      const response = await fetch(
-        `http://localhost:8080/api/students/${id}`,
-        {
-          method: 'DELETE'
-        }
-      );
-
-      if (!response.ok) {
-        throw new Error('Xóa thất bại');
-      }
-
-      setUsers((prevUsers) =>
-        prevUsers.filter((user) => user.id !== id)
-      );
-    } catch (error) {
-      console.error(error);
-      alert('Không thể xóa người dùng');
+      const saved = editingId ? await apiClient.updateUser(editingId, form) : await apiClient.createUser(form);
+      setUsers((current) => editingId ? current.map((user) => user.id === editingId ? saved : user) : [saved, ...current]);
+      closeForm();
+    } catch {
+      setError('Không thể lưu người dùng. Kiểm tra MSSV, email và mã RFID không bị trùng.');
+    } finally {
+      setSaving(false);
     }
   };
 
+  const handleDelete = async (user) => {
+    if (!window.confirm(`Xóa ${user.name}? Thao tác này không thể hoàn tác.`)) return;
+    try {
+      await apiClient.deleteUser(user.id);
+      setUsers((current) => current.filter((item) => item.id !== user.id));
+    } catch {
+      setError('Không thể xóa người dùng này. Có thể tài khoản đã có dữ liệu điểm danh liên quan.');
+    }
+  };
+
+  const search = keyword.trim().toLowerCase();
+  const filtered = users.filter((user) => !search || user.name?.toLowerCase().includes(search) || user.mssv?.toLowerCase().includes(search) || user.rfidUid?.toLowerCase().includes(search));
+
   return (
-    <div className="flex-col gap-6">
+    <div className="page-stack">
+      <PageHeader title="Người dùng" description="Quản lý hồ sơ, mã RFID và trạng thái dữ liệu khuôn mặt" actions={<Button variant="primary" onClick={openCreate}><Plus size={16} /> Thêm người dùng</Button>} />
+      <ErrorBanner message={error} onRetry={loadUsers} />
 
-      <div className="flex items-center justify-between mb-2">
-        <div>
-          <h2>Quản lý người dùng</h2>
-          <p className="text-muted">
-            Thêm, sửa, xóa và quản lý dữ liệu RFID/Khuôn mặt
-          </p>
-        </div>
-
-        <button
-          className="btn btn-primary"
-          onClick={() => setShowAddForm(true)}
-        >
-          <Plus size={18} />
-          Thêm người dùng mới
-        </button>
-      </div>
-
-      {showAddForm && (
-        <div className="card">
-          <h3 style={{ marginBottom: '20px' }}>
-            Thêm người dùng mới
-          </h3>
-
-          <form
-            onSubmit={handleAddUser}
-            className="flex-col gap-4"
-          >
-            <input
-              className="input"
-              placeholder="MSSV"
-              required
-              value={newUser.studentCode}
-              onChange={(e) =>
-                setNewUser({
-                  ...newUser,
-                  studentCode: e.target.value
-                })
-              }
-            />
-
-            <input
-              className="input"
-              placeholder="Họ và tên"
-              required
-              value={newUser.fullName}
-              onChange={(e) =>
-                setNewUser({
-                  ...newUser,
-                  fullName: e.target.value
-                })
-              }
-            />
-
-            <input
-              className="input"
-              placeholder="Mã RFID"
-              required
-              value={newUser.rfidUid}
-              onChange={(e) =>
-                setNewUser({
-                  ...newUser,
-                  rfidUid: e.target.value
-                })
-              }
-            />
-
-            <input
-              className="input"
-              type="email"
-              placeholder="Email"
-              value={newUser.email}
-              onChange={(e) =>
-                setNewUser({
-                  ...newUser,
-                  email: e.target.value
-                })
-              }
-            />
-
-            <input
-              className="input"
-              placeholder="SĐT phụ huynh"
-              value={newUser.parentPhone}
-              onChange={(e) =>
-                setNewUser({
-                  ...newUser,
-                  parentPhone: e.target.value
-                })
-              }
-            />
-
-            <div className="flex gap-2">
-              <button
-                type="submit"
-                className="btn btn-primary"
-              >
-                Thêm
-              </button>
-
-              <button
-                type="button"
-                className="btn btn-secondary"
-                onClick={() => setShowAddForm(false)}
-              >
-                Hủy
-              </button>
-            </div>
+      {showForm && (
+        <Panel className="form-panel">
+          <div className="panel-heading"><div><h2>{editingId ? 'Chỉnh sửa hồ sơ' : 'Thêm người dùng'}</h2><p>Các trường có dấu * là bắt buộc</p></div><button className="icon-btn" onClick={closeForm} aria-label="Đóng"><X size={18} /></button></div>
+          <form className="form-grid" onSubmit={handleSubmit}>
+            <label><span>Họ và tên *</span><input className="input" required value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} /></label>
+            <label><span>MSSV *</span><input className="input" required value={form.mssv} onChange={(event) => setForm({ ...form, mssv: event.target.value })} /></label>
+            <label><span>Mã RFID *</span><input className="input" required value={form.rfidUid} onChange={(event) => setForm({ ...form, rfidUid: event.target.value })} /></label>
+            <label className="form-wide"><span>Tham chiếu dữ liệu khuôn mặt</span><input className="input" value={form.faceEmbedding} onChange={(event) => setForm({ ...form, faceEmbedding: event.target.value })} placeholder="Để trống nếu chưa đăng ký" /></label>
+            <div className="form-actions form-wide"><Button type="button" onClick={closeForm}>Hủy</Button><Button variant="primary" type="submit" disabled={saving}>{saving ? 'Đang lưu...' : editingId ? 'Lưu thay đổi' : 'Tạo người dùng'}</Button></div>
           </form>
-        </div>
+        </Panel>
       )}
 
-      <div className="card">
-        <div className="flex items-center justify-between mb-6">
-          <div className="relative" style={{ width: '300px' }}>
-            <Search
-              size={18}
-              className="text-muted"
-              style={{
-                position: 'absolute',
-                left: '12px',
-                top: '50%',
-                transform: 'translateY(-50%)'
-              }}
-            />
-
-            <input
-              type="text"
-              className="input"
-              placeholder="Tìm kiếm theo tên hoặc MSSV..."
-              style={{ paddingLeft: '40px' }}
-              value={keyword}
-              onChange={(e) => setKeyword(e.target.value)}
-            />
-          </div>
-
-          <button className="btn btn-secondary">
-            Lọc dữ liệu
-          </button>
+      <Panel>
+        <div className="filter-bar">
+          <label className="search-field"><Search size={17} /><input value={keyword} onChange={(event) => setKeyword(event.target.value)} placeholder="Tìm theo tên, MSSV hoặc RFID" /></label>
+          <span className="result-count">{filtered.length}/{users.length} người dùng</span>
         </div>
-
         <div className="table-container">
           <table>
-            <thead>
-              <tr>
-                <th>MSSV</th>
-                <th>Họ và tên</th>
-                <th>Mã RFID</th>
-                <th>Dữ liệu khuôn mặt</th>
-                <th>Thao tác</th>
-              </tr>
-            </thead>
-
+            <thead><tr><th>Người dùng</th><th>MSSV</th><th>RFID</th><th>Khuôn mặt</th><th></th></tr></thead>
             <tbody>
-              {loading ? (
-                <tr>
-                  <td colSpan="5">
-                    Đang tải dữ liệu...
-                  </td>
+              {filtered.map((user) => (
+                <tr key={user.id}>
+                  <td><div className="person-cell"><span className="initials">{user.name?.slice(0, 1) || '?'}</span><strong>{user.name}</strong></div></td>
+                  <td className="cell-code">{user.mssv}</td>
+                  <td>{user.rfidUid ? <span className="badge badge-info"><Fingerprint size={13} /> {user.rfidUid}</span> : <span className="text-muted">Chưa đăng ký</span>}</td>
+                  <td>{user.faceEmbedding ? <span className="badge badge-success"><Camera size={13} /> Đã có</span> : <span className="badge badge-neutral">Chưa có</span>}</td>
+                  <td><div className="row-actions"><button className="icon-btn" onClick={() => openEdit(user)} title="Chỉnh sửa"><Edit2 size={17} /></button><button className="icon-btn danger" onClick={() => handleDelete(user)} title="Xóa"><Trash2 size={17} /></button></div></td>
                 </tr>
-              ) : filteredUsers.length === 0 ? (
-                <tr>
-                  <td colSpan="5">
-                    Không có dữ liệu
-                  </td>
-                </tr>
-              ) : (
-                filteredUsers.map((user) => (
-                  <tr key={user.id}>
-                    <td style={{ fontWeight: 500 }}>
-                      {user.studentCode}
-                    </td>
-
-                    <td>{user.fullName}</td>
-
-                    <td>
-                      {!user.rfidUid ? (
-                        <span className="text-muted">
-                          Chưa đăng ký
-                        </span>
-                      ) : (
-                        <span className="badge badge-info flex items-center gap-2 w-max">
-                          <Fingerprint size={14} />
-                          {user.rfidUid}
-                        </span>
-                      )}
-                    </td>
-
-                    <td>
-                      {user.faceImage ? (
-                        <span className="badge badge-success flex items-center gap-2 w-max">
-                          <Camera size={14} />
-                          Đã đăng ký
-                        </span>
-                      ) : (
-                        <span className="badge badge-error">
-                          Chưa đăng ký
-                        </span>
-                      )}
-                    </td>
-
-                    <td>
-                      <div className="flex gap-2">
-                        <button
-                          className="icon-btn"
-                          title="Chỉnh sửa"
-                        >
-                          <Edit2 size={18} />
-                        </button>
-
-                        <button
-                          className="icon-btn"
-                          style={{
-                            color: 'var(--status-error)'
-                          }}
-                          title="Xóa"
-                          onClick={() => handleDelete(user.id)}
-                        >
-                          <Trash2 size={18} />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))
-              )}
+              ))}
+              {!loading && !filtered.length && <tr><td colSpan="5"><div className="empty-state">Không tìm thấy người dùng.</div></td></tr>}
+              {loading && <tr><td colSpan="5"><div className="empty-state">Đang tải dữ liệu...</div></td></tr>}
             </tbody>
           </table>
         </div>
-      </div>
-
+      </Panel>
     </div>
   );
 }

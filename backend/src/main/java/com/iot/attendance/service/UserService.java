@@ -6,6 +6,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import java.util.List;
 import java.util.Optional;
+import java.util.UUID;
 
 @Service
 public class UserService {
@@ -16,7 +17,7 @@ public class UserService {
         return userRepository.findAll();
     }
 
-    public Optional<User> getUserById(Long id) {
+    public Optional<User> getUserById(UUID id) {
         return userRepository.findById(id);
     }
 
@@ -28,7 +29,21 @@ public class UserService {
         return userRepository.save(user);
     }
 
-    public void deleteUser(Long id) {
+    public Optional<User> updateUser(UUID id, User update) {
+        return userRepository.findById(id).map(user -> {
+            user.setRfidUid(update.getRfidUid());
+            user.setName(update.getName());
+            user.setMssv(update.getMssv());
+            user.setFaceEmbedding(update.getFaceEmbedding());
+            return userRepository.save(user);
+        });
+    }
+
+    public boolean deleteUser(UUID id) {
+        if (!userRepository.existsById(id)) {
+            return false;
+        }
         userRepository.deleteById(id);
+        return true;
     }
 }

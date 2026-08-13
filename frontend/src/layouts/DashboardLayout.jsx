@@ -1,28 +1,29 @@
-import React from 'react';
+import { useState } from 'react';
 import { NavLink, Outlet } from 'react-router-dom';
-import { LayoutDashboard, Users, Camera, Clock, BarChart3, Settings, AlertTriangle, Bell, User } from 'lucide-react';
+import { LayoutDashboard, Users, Clock, BarChart3, Settings, Bell, User, Menu, X, ScanFace } from 'lucide-react';
 import './DashboardLayout.css';
 
 const navItems = [
   { path: '/', label: 'Dashboard', icon: LayoutDashboard },
   { path: '/users', label: 'Quản lý người dùng', icon: Users },
-  { path: '/monitoring', label: 'Giám sát trực tiếp', icon: Camera },
   { path: '/history', label: 'Lịch sử điểm danh', icon: Clock },
   { path: '/reports', label: 'Báo cáo & Thống kê', icon: BarChart3 },
   { path: '/settings', label: 'Cài đặt hệ thống', icon: Settings },
-  { path: '/support', label: 'Hỗ trợ / Báo lỗi', icon: AlertTriangle },
 ];
 
 export default function DashboardLayout() {
+  const [menuOpen, setMenuOpen] = useState(false);
+
   return (
-    <div className="layout-container flex">
-      {/* Sidebar */}
-      <aside className="sidebar flex-col">
+    <div className="layout-container">
+      {menuOpen && <button className="sidebar-backdrop" aria-label="Đóng menu" onClick={() => setMenuOpen(false)} />}
+      <aside className={`sidebar ${menuOpen ? 'open' : ''}`}>
         <div className="sidebar-header flex items-center gap-4">
-          <div className="logo-icon glass-panel">
-            <Camera size={24} color="var(--accent-primary)" />
+          <div className="logo-icon">
+            <ScanFace size={22} />
           </div>
-          <h2 className="logo-text">Smart Attend</h2>
+          <div><h2 className="logo-text">Attendly</h2><span className="logo-subtitle">Operations console</span></div>
+          <button className="mobile-close icon-btn" onClick={() => setMenuOpen(false)}><X size={18} /></button>
         </div>
         
         <nav className="sidebar-nav flex-col gap-2">
@@ -30,6 +31,7 @@ export default function DashboardLayout() {
             <NavLink
               key={item.path}
               to={item.path}
+              onClick={() => setMenuOpen(false)}
               className={({ isActive }) => `nav-link flex items-center gap-4 ${isActive ? 'active' : ''}`}
             >
               <item.icon size={20} />
@@ -37,19 +39,20 @@ export default function DashboardLayout() {
             </NavLink>
           ))}
         </nav>
+        <div className="sidebar-footer"><span className="status-pulse" /> API workspace</div>
       </aside>
 
       {/* Main Content Area */}
       <div className="main-content flex-col">
-        {/* Header */}
-        <header className="header flex items-center justify-between glass-panel">
+        <header className="header flex items-center justify-between">
           <div className="header-title">
-            <h3>Hệ thống điểm danh khuôn mặt & RFID</h3>
+            <button className="mobile-menu icon-btn" onClick={() => setMenuOpen(true)}><Menu size={20} /></button>
+            <div><h3>Trung tâm vận hành điểm danh</h3><p>Theo dõi và xử lý dữ liệu tập trung</p></div>
           </div>
           <div className="header-actions flex items-center gap-4">
             <button className="icon-btn relative">
               <Bell size={20} />
-              <span className="notification-dot"></span>
+              <span className="notification-dot" />
             </button>
             <div className="user-profile flex items-center gap-2">
               <div className="avatar flex items-center justify-center">
@@ -60,7 +63,6 @@ export default function DashboardLayout() {
           </div>
         </header>
 
-        {/* Page Content */}
         <main className="page-wrapper">
           <Outlet />
         </main>

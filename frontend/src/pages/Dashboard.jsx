@@ -1,125 +1,104 @@
-import React from 'react';
-import { Users, UserCheck, UserX, Activity } from 'lucide-react';
-import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { useEffect, useState } from 'react';
+import { Activity, Clock3, RefreshCw, UserCheck, Users } from 'lucide-react';
+import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
+import { apiClient } from '../api/client';
+import { Button, ErrorBanner, PageHeader, Panel } from '../components/ui';
 
-const data = [
-  { time: '07:00', present: 10, late: 0 },
-  { time: '07:30', present: 45, late: 5 },
-  { time: '08:00', present: 120, late: 15 },
-  { time: '08:30', present: 140, late: 25 },
-  { time: '09:00', present: 145, late: 28 },
-  { time: '09:30', present: 148, late: 30 },
-];
+const timeFormatter = new Intl.DateTimeFormat('vi-VN', { hour: '2-digit', minute: '2-digit' });
+const dateFormatter = new Intl.DateTimeFormat('vi-VN', { dateStyle: 'full' });
+
+function buildTimeline(records) {
+  const hours = new Map();
+  records.forEach((record) => {
+    const date = new Date(record.checkInTime);
+    const hour = `${String(date.getHours()).padStart(2, '0')}:00`;
+    const current = hours.get(hour) || { time: hour, onTime: 0, late: 0 };
+    if (record.status === 'LATE') current.late += 1;
+    else current.onTime += 1;
+    hours.set(hour, current);
+  });
+  return [...hours.values()].sort((a, b) => a.time.localeCompare(b.time));
+}
 
 export default function Dashboard() {
+  const [data, setData] = useState({ users: [], records: [] });
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+
+  const loadData = () => {
+    setLoading(true);
+    setError('');
+    Promise.all([apiClient.getUsers(), apiClient.getTodayAttendance()])
+      .then(([users, records]) => setData({ users, records }))
+      .catch(() => setError('Không thể tải dữ liệu tổng quan. Kiểm tra kết nối backend.'))
+      .finally(() => setLoading(false));
+  };
+
+  useEffect(loadData, []);
+
+  const attendedIds = new Set(data.records.map((record) => record.user?.id));
+  const lateCount = data.records.filter((record) => record.status === 'LATE').length;
+  const recent = [...data.records]
+    .sort((a, b) => new Date(b.checkInTime) - new Date(a.checkInTime))
+    .slice(0, 6);
+  const timeline = buildTimeline(data.records);
+  const stats = [
+    { label: 'Người dùng', value: data.users.length, icon: Users, tone: 'blue' },
+    { label: 'Đã điểm danh', value: attendedIds.size, icon: UserCheck, tone: 'green' },
+    { label: 'Đi muộn', value: lateCount, icon: Clock3, tone: 'amber' },
+    { label: 'Chưa ghi nhận', value: Math.max(data.users.length - attendedIds.size, 0), icon: Activity, tone: 'red' },
+  ];
+
   return (
-    <div className="flex-col gap-6">
-      <div className="flex items-center justify-between mb-2">
-        <div>
-          <h2>Tổng quan hệ thống</h2>
-          <p className="text-muted">Dữ liệu điểm danh hôm nay - 12/08/2026</p>
-        </div>
+    <div className="page-stack">
+      <PageHeader
+        title="Tổng quan hôm nay"
+        description={dateFormatter.format(new Date())}
+        actions={<Button onClick={loadData} disabled={loading}><RefreshCw size={16} /> Làm mới</Button>}
+      />
+      <ErrorBanner message={error} onRetry={loadData} />
+
+      <div className="stats-grid">
+        {stats.map(({ label, value, icon: Icon, tone }) => (
+          <Panel className="stat-panel" key={label}>
+            <span className={`stat-icon tone-${tone}`}><Icon size={20} /></span>
+            <div><p>{label}</p><strong>{loading ? '...' : value}</strong></div>
+          </Panel>
+        ))}
       </div>
 
-      {/* Stats Cards */}
-      <div className="grid-stats">
-        <div className="card stat-card flex items-center gap-4">
-          <div className="stat-icon" style={{ background: 'rgba(59, 130, 246, 0.1)', color: 'var(--accent-primary)' }}>
-            <Users size={28} />
+      <div className="dashboard-grid">
+        <Panel className="chart-panel">
+          <div className="panel-heading"><div><h2>Nhịp điểm danh</h2><p>Số lượt ghi nhận theo giờ</p></div></div>
+          <div className="chart-frame">
+            {timeline.length ? (
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={timeline} margin={{ top: 8, right: 8, left: -20, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--border-color)" />
+                  <XAxis dataKey="time" tickLine={false} axisLine={false} />
+                  <YAxis allowDecimals={false} tickLine={false} axisLine={false} />
+                  <Tooltip />
+                  <Area type="monotone" dataKey="onTime" name="Đúng giờ" stroke="#18866b" fill="#d8eee8" strokeWidth={2} />
+                  <Area type="monotone" dataKey="late" name="Đi muộn" stroke="#c27a14" fill="#fae8c6" strokeWidth={2} />
+                </AreaChart>
+              </ResponsiveContainer>
+            ) : <div className="empty-state">Chưa có lượt điểm danh hôm nay.</div>}
           </div>
-          <div>
-            <p className="text-muted text-sm">Tổng số đăng ký</p>
-            <h3 className="stat-value">156</h3>
-          </div>
-        </div>
-        
-        <div className="card stat-card flex items-center gap-4">
-          <div className="stat-icon" style={{ background: 'rgba(16, 185, 129, 0.1)', color: 'var(--status-success)' }}>
-            <UserCheck size={28} />
-          </div>
-          <div>
-            <p className="text-muted text-sm">Đã điểm danh</p>
-            <h3 className="stat-value">148</h3>
-          </div>
-        </div>
-        
-        <div className="card stat-card flex items-center gap-4">
-          <div className="stat-icon" style={{ background: 'rgba(245, 158, 11, 0.1)', color: 'var(--status-warning)' }}>
-            <UserX size={28} />
-          </div>
-          <div>
-            <p className="text-muted text-sm">Đi muộn</p>
-            <h3 className="stat-value">30</h3>
-          </div>
-        </div>
+        </Panel>
 
-        <div className="card stat-card flex items-center gap-4">
-          <div className="stat-icon" style={{ background: 'rgba(239, 68, 68, 0.1)', color: 'var(--status-error)' }}>
-            <Activity size={28} />
-          </div>
-          <div>
-            <p className="text-muted text-sm">Vắng mặt</p>
-            <h3 className="stat-value">8</h3>
-          </div>
-        </div>
-      </div>
-
-      {/* Charts & Activity */}
-      <div className="grid-content">
-        <div className="card col-span-2">
-          <div className="flex items-center justify-between mb-6">
-            <h3>Biểu đồ điểm danh hôm nay</h3>
-            <span className="badge badge-success">Cập nhật trực tiếp</span>
-          </div>
-          <div style={{ height: '300px' }}>
-            <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={data} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
-                <defs>
-                  <linearGradient id="colorPresent" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="var(--status-success)" stopOpacity={0.3}/>
-                    <stop offset="95%" stopColor="var(--status-success)" stopOpacity={0}/>
-                  </linearGradient>
-                  <linearGradient id="colorLate" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="var(--status-warning)" stopOpacity={0.3}/>
-                    <stop offset="95%" stopColor="var(--status-warning)" stopOpacity={0}/>
-                  </linearGradient>
-                </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke="var(--border-color)" vertical={false} />
-                <XAxis dataKey="time" stroke="var(--text-muted)" tick={{fill: 'var(--text-muted)'}} />
-                <YAxis stroke="var(--text-muted)" tick={{fill: 'var(--text-muted)'}} />
-                <Tooltip 
-                  contentStyle={{ backgroundColor: 'var(--bg-surface)', borderColor: 'var(--border-color)', borderRadius: '8px' }}
-                  itemStyle={{ color: 'var(--text-primary)' }}
-                />
-                <Area type="monotone" dataKey="present" name="Có mặt" stroke="var(--status-success)" fillOpacity={1} fill="url(#colorPresent)" />
-                <Area type="monotone" dataKey="late" name="Đi muộn" stroke="var(--status-warning)" fillOpacity={1} fill="url(#colorLate)" />
-              </AreaChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
-
-        <div className="card">
-          <h3 className="mb-4">Hoạt động gần đây</h3>
-          <div className="flex-col gap-4">
-            {[1, 2, 3, 4, 5].map((i) => (
-              <div key={i} className="flex items-center gap-4 activity-item pb-4" style={{ borderBottom: i !== 5 ? '1px solid var(--border-color)' : 'none' }}>
-                <div className="avatar" style={{ width: '40px', height: '40px' }}>
-                  <img src={`https://i.pravatar.cc/150?img=${i+10}`} alt="user" style={{ borderRadius: '50%', width: '100%', height: '100%' }} />
-                </div>
-                <div className="flex-1">
-                  <p style={{ fontWeight: 500 }}>Nguyễn Văn {String.fromCharCode(64 + i)}</p>
-                  <p className="text-muted text-sm">2412700{i}</p>
-                </div>
-                <div className="text-right">
-                  <span className={`badge ${i % 3 === 0 ? 'badge-warning' : 'badge-success'}`}>
-                    {i % 3 === 0 ? 'Đi muộn' : 'Đúng giờ'}
-                  </span>
-                  <p className="text-muted text-sm mt-1">07:{30 + i} AM</p>
-                </div>
+        <Panel>
+          <div className="panel-heading"><div><h2>Gần đây</h2><p>{recent.length} lượt mới nhất</p></div></div>
+          <div className="activity-list">
+            {recent.map((record) => (
+              <div className="activity-row" key={record.id}>
+                <span className="initials">{record.user?.name?.slice(0, 1) || '?'}</span>
+                <div className="activity-person"><strong>{record.user?.name || 'Không xác định'}</strong><span>{record.user?.mssv || 'Chưa có MSSV'}</span></div>
+                <div className="activity-meta"><span className={`badge ${record.status === 'LATE' ? 'badge-warning' : 'badge-success'}`}>{record.status === 'LATE' ? 'Đi muộn' : 'Đúng giờ'}</span><time>{timeFormatter.format(new Date(record.checkInTime))}</time></div>
               </div>
             ))}
+            {!recent.length && <div className="empty-state">Chưa có hoạt động.</div>}
           </div>
-        </div>
+        </Panel>
       </div>
     </div>
   );
