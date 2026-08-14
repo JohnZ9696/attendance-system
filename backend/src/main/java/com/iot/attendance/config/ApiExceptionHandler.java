@@ -16,7 +16,7 @@ public class ApiExceptionHandler {
     public ResponseEntity<Map<String, Object>> handleDataConflict(DataIntegrityViolationException exception) {
         return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of(
                 "status", HttpStatus.CONFLICT.value(),
-                "message", "MSSV, email, or RFID already exists",
+                "message", "MSSV or RFID already exists, or face data is invalid",
                 "timestamp", LocalDateTime.now().toString()
         ));
     }

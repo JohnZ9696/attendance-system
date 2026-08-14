@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { NavLink, Outlet } from 'react-router-dom';
-import { LayoutDashboard, Users, Clock, BarChart3, Settings, Bell, User, Menu, X, ScanFace } from 'lucide-react';
+import { LayoutDashboard, Users, Clock, BarChart3, Settings, Bell, User, Menu, X, ScanFace, CircleAlert } from 'lucide-react';
+import { apiClient } from '../api/client';
 import './DashboardLayout.css';
 
 const navItems = [
@@ -13,6 +14,46 @@ const navItems = [
 
 export default function DashboardLayout() {
   const [menuOpen, setMenuOpen] = useState(false);
+  const [helpRequest, setHelpRequest] = useState(null);
+  const knownHelpIds = useRef(new Set());
+  const initializedHelpPolling = useRef(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    let loading = false;
+
+    const pollHelpRequests = async () => {
+      if (loading) return;
+      loading = true;
+      try {
+        const requests = await apiClient.getAssistanceRequests();
+        if (cancelled) return;
+
+        if (!initializedHelpPolling.current) {
+          requests.forEach((request) => knownHelpIds.current.add(request.id));
+          initializedHelpPolling.current = true;
+          return;
+        }
+
+        const newRequests = requests.filter((request) => !knownHelpIds.current.has(request.id));
+        requests.forEach((request) => knownHelpIds.current.add(request.id));
+        if (newRequests.length > 0) {
+          setHelpRequest(newRequests[newRequests.length - 1]);
+        }
+      } catch {
+        // Other API-backed pages already surface connectivity failures.
+      } finally {
+        loading = false;
+      }
+    };
+
+    pollHelpRequests();
+    const intervalId = window.setInterval(pollHelpRequests, 3000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(intervalId);
+    };
+  }, []);
 
   return (
     <div className="layout-container">
@@ -50,9 +91,9 @@ export default function DashboardLayout() {
             <div><h3>Trung tâm vận hành điểm danh</h3><p>Theo dõi và xử lý dữ liệu tập trung</p></div>
           </div>
           <div className="header-actions flex items-center gap-4">
-            <button className="icon-btn relative">
+            <button className="icon-btn relative" aria-label="Thông báo hỗ trợ">
               <Bell size={20} />
-              <span className="notification-dot" />
+              {helpRequest && <span className="notification-dot" />}
             </button>
             <div className="user-profile flex items-center gap-2">
               <div className="avatar flex items-center justify-center">
@@ -67,6 +108,21 @@ export default function DashboardLayout() {
           <Outlet />
         </main>
       </div>
+
+      {helpRequest && (
+        <div className="help-alert-backdrop" role="presentation">
+          <section className="help-alert" role="alertdialog" aria-modal="true" aria-labelledby="help-alert-title">
+            <div className="help-alert-icon"><CircleAlert size={26} /></div>
+            <div className="help-alert-content">
+              <span className="help-alert-kicker">Yêu cầu hỗ trợ mới</span>
+              <h2 id="help-alert-title">{helpRequest.user?.name || 'Người dùng tại thiết bị'}</h2>
+              <p>{helpRequest.message || 'Cần quản lý hỗ trợ tại máy điểm danh.'}</p>
+              {helpRequest.user?.mssv && <span className="help-alert-meta">MSSV {helpRequest.user.mssv}</span>}
+            </div>
+            <button className="help-alert-dismiss" autoFocus onClick={() => setHelpRequest(null)}>Đã nhận</button>
+          </section>
+        </div>
+      )}
     </div>
   );
 }

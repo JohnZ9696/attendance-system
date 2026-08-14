@@ -25,16 +25,24 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
-  const loadData = () => {
-    setLoading(true);
-    setError('');
-    Promise.all([apiClient.getUsers(), apiClient.getTodayAttendance()])
-      .then(([users, records]) => setData({ users, records }))
-      .catch(() => setError('Không thể tải dữ liệu tổng quan. Kiểm tra kết nối backend.'))
-      .finally(() => setLoading(false));
+  const loadData = async (silent = false) => {
+    if (!silent) setLoading(true);
+    try {
+      const [users, records] = await Promise.all([apiClient.getUsers(), apiClient.getTodayAttendance()]);
+      setData({ users, records });
+      setError('');
+    } catch {
+      if (!silent) setError('Không thể tải dữ liệu tổng quan. Kiểm tra kết nối backend.');
+    } finally {
+      if (!silent) setLoading(false);
+    }
   };
 
-  useEffect(loadData, []);
+  useEffect(() => {
+    loadData();
+    const intervalId = window.setInterval(() => loadData(true), 3000);
+    return () => window.clearInterval(intervalId);
+  }, []);
 
   const attendedIds = new Set(data.records.map((record) => record.user?.id));
   const lateCount = data.records.filter((record) => record.status === 'LATE').length;
@@ -54,7 +62,7 @@ export default function Dashboard() {
       <PageHeader
         title="Tổng quan hôm nay"
         description={dateFormatter.format(new Date())}
-        actions={<Button onClick={loadData} disabled={loading}><RefreshCw size={16} /> Làm mới</Button>}
+        actions={<Button onClick={() => loadData()} disabled={loading}><RefreshCw size={16} /> Làm mới</Button>}
       />
       <ErrorBanner message={error} onRetry={loadData} />
 

@@ -48,4 +48,12 @@ public class AttendanceController {
             @RequestParam String method) {
         return ResponseEntity.ok(attendanceService.recordAttendance(userId, checkInTime, status, method));
     }
+
+    @DeleteMapping("/{id}")
+    public ResponseEntity<Void> deleteAttendanceRecord(@PathVariable UUID id) {
+        if (!attendanceService.deleteAttendanceRecord(id)) {
+            return ResponseEntity.notFound().build();
+        }
+        return ResponseEntity.noContent().build();
+    }
 }
