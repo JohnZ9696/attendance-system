@@ -4,6 +4,8 @@ import { apiClient } from '../api/client';
 import { Button, ErrorBanner, PageHeader, Panel } from '../components/ui';
 
 const emptyForm = { name: '', mssv: '', rfidUid: '', faceEmbedding: '' };
+const statusLabels = { IN: 'Vào', OUT: 'Ra', LATE: 'Đi muộn' };
+const statusBadge = { IN: 'badge-success', OUT: 'badge-info', LATE: 'badge-warning' };
 
 export default function Users() {
   const [users, setUsers] = useState([]);
@@ -15,6 +17,13 @@ export default function Users() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [enrollment, setEnrollment] = useState(null);
+  const [selectedUser, setSelectedUser] = useState(null);
+  const [userLogs, setUserLogs] = useState([]);
+  const [userLogsLoading, setUserLogsLoading] = useState(false);
+  const [userLogsError, setUserLogsError] = useState('');
+  const [absenceRange, setAbsenceRange] = useState('month');
+  const [dayOffs, setDayOffs] = useState([]);
+  const [weeklyDayOffs, setWeeklyDayOffs] = useState([0, 6]);
 
   const loadUsers = () => {
     setLoading(true);
@@ -50,6 +59,33 @@ export default function Users() {
       window.clearInterval(intervalId);
     };
   }, [enrollment]);
+
+  useEffect(() => {
+    if (!selectedUser) return undefined;
+    let cancelled = false;
+    setUserLogsLoading(true);
+    setUserLogsError('');
+    Promise.all([apiClient.getUserAttendance(selectedUser.id), apiClient.getSettings()])
+      .then(([logs, settings]) => {
+        if (cancelled) return;
+        setUserLogs(logs);
+        setDayOffs(Array.isArray(settings.dayOffs) ? settings.dayOffs.map((value) => value.slice(0, 10)) : []);
+        setWeeklyDayOffs(Array.isArray(settings.weeklyDayOffs) ? settings.weeklyDayOffs : [0, 6]);
+      })
+      .catch(() => { if (!cancelled) setUserLogsError('Không thể tải lịch sử điểm danh.'); })
+      .finally(() => { if (!cancelled) setUserLogsLoading(false); });
+    return () => { cancelled = true; };
+  }, [selectedUser]);
+
+  const openDetail = (user) => {
+    setSelectedUser(user);
+    setUserLogs([]);
+  };
+
+  const closeDetail = () => {
+    setSelectedUser(null);
+    setUserLogs([]);
+  };
 
   const openCreate = () => {
     setEditingId(null);
@@ -112,6 +148,7 @@ export default function Users() {
     try {
       await apiClient.deleteUser(user.id);
       setUsers((current) => current.filter((item) => item.id !== user.id));
+      if (selectedUser?.id === user.id) closeDetail();
     } catch {
       setError('Không thể xóa người dùng này. Kiểm tra kết nối backend và thử lại.');
     }
@@ -119,6 +156,27 @@ export default function Users() {
 
   const search = keyword.trim().toLowerCase();
   const filtered = users.filter((user) => !search || user.name?.toLowerCase().includes(search) || user.mssv?.toLowerCase().includes(search) || user.rfidUid?.toLowerCase().includes(search));
+
+  const sortedLogs = [...userLogs].sort((a, b) => new Date(b.checkInTime) - new Date(a.checkInTime));
+  const presentDays = new Set(userLogs.map((log) => new Date(log.checkInTime).toLocaleDateString('en-CA')));
+  const today = new Date();
+  let rangeStart;
+  if (absenceRange === '7') rangeStart = new Date(today.getFullYear(), today.getMonth(), today.getDate() - 6);
+  else if (absenceRange === '30') rangeStart = new Date(today.getFullYear(), today.getMonth(), today.getDate() - 29);
+  else rangeStart = new Date(today.getFullYear(), today.getMonth(), 1);
+  if (selectedUser?.createdAt) {
+    const created = new Date(selectedUser.createdAt);
+    if (created > rangeStart) rangeStart = new Date(created.getFullYear(), created.getMonth(), created.getDate());
+  }
+  const absentDays = [];
+  for (let day = new Date(rangeStart); day <= today; day.setDate(day.getDate() + 1)) {
+    const dow = day.getDay();
+    if (weeklyDayOffs.includes(dow)) continue;
+    const key = day.toLocaleDateString('en-CA');
+    if (dayOffs.includes(key)) continue;
+    if (!presentDays.has(key)) absentDays.push(new Date(day));
+  }
+  const lateCount = userLogs.filter((log) => log.status === 'LATE').length;
 
   return (
     <div className="page-stack">
@@ -159,6 +217,67 @@ export default function Users() {
         </Panel>
       )}
 
+      {selectedUser && (
+        <div className="enrollment-backdrop" role="presentation">
+          <section className="enrollment-dialog" role="dialog" aria-modal="true" aria-labelledby="detail-title" style={{ width: 'min(940px, 100%)' }}>
+            <div className="panel-heading">
+              <div>
+                <h2 id="detail-title">{selectedUser.name}</h2>
+                <p>MSSV {selectedUser.mssv}{selectedUser.rfidUid ? ` · RFID ${selectedUser.rfidUid}` : ''}</p>
+              </div>
+              <button className="icon-btn" onClick={closeDetail} aria-label="Đóng"><X size={18} /></button>
+            </div>
+
+            {userLogsError && <div className="text-muted" style={{ color: 'var(--status-error)', marginBottom: 12 }}>{userLogsError}</div>}
+
+            <div className="filter-bar">
+              <label className="text-sm text-muted">Khoảng thời gian tính vắng</label>
+              <select className="input compact-input" value={absenceRange} onChange={(event) => setAbsenceRange(event.target.value)}>
+                <option value="month">Tháng này</option>
+                <option value="7">7 ngày qua</option>
+                <option value="30">30 ngày qua</option>
+              </select>
+            </div>
+
+            <div className="stat-chip-row">
+              <div className="stat-chip"><strong>{presentDays.size}</strong><span>Đã điểm danh (ngày)</span></div>
+              <div className="stat-chip"><strong>{lateCount}</strong><span>Đi muộn</span></div>
+              <div className="stat-chip"><strong>{absentDays.length}</strong><span>Vắng (ngày học)</span></div>
+            </div>
+
+            <div className="detail-columns">
+              <div className="detail-col">
+                <h3>Lịch sử điểm danh</h3>
+                <div className="table-container">
+                  <table>
+                    <thead><tr><th>Thời gian</th><th>Trạng thái</th><th>Phương thức</th></tr></thead>
+                    <tbody>
+                      {sortedLogs.map((log) => (
+                        <tr key={log.id}>
+                          <td>{new Date(log.checkInTime).toLocaleString('vi-VN')}</td>
+                          <td><span className={`badge ${statusBadge[log.status] || 'badge-success'}`}>{statusLabels[log.status] || log.status}</span></td>
+                          <td>{log.method || '-'}</td>
+                        </tr>
+                      ))}
+                      {!userLogsLoading && !sortedLogs.length && <tr><td colSpan="3"><div className="empty-state">Chưa có lượt điểm danh.</div></td></tr>}
+                      {userLogsLoading && <tr><td colSpan="3"><div className="empty-state">Đang tải...</div></td></tr>}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+              <div className="detail-col">
+                <h3>Ngày vắng</h3>
+                {absentDays.length ? (
+                  <ul className="absence-list">
+                    {absentDays.map((day) => <li key={day.toISOString()}>{day.toLocaleDateString('vi-VN', { weekday: 'long', day: '2-digit', month: '2-digit', year: 'numeric' })}</li>)}
+                  </ul>
+                ) : <div className="empty-state">Không có ngày vắng trong khoảng này.</div>}
+              </div>
+            </div>
+          </section>
+        </div>
+      )}
+
       <Panel>
         <div className="filter-bar">
           <label className="search-field"><Search size={17} /><input value={keyword} onChange={(event) => setKeyword(event.target.value)} placeholder="Tìm theo tên, MSSV hoặc RFID" /></label>
@@ -169,12 +288,12 @@ export default function Users() {
             <thead><tr><th>Người dùng</th><th>MSSV</th><th>RFID</th><th>Khuôn mặt</th><th></th></tr></thead>
             <tbody>
               {filtered.map((user) => (
-                <tr key={user.id}>
+                <tr key={user.id} className="row-clickable" onClick={() => openDetail(user)}>
                   <td><div className="person-cell"><span className="initials">{user.name?.slice(0, 1) || '?'}</span><strong>{user.name}</strong></div></td>
                   <td className="cell-code">{user.mssv}</td>
                   <td>{user.rfidUid ? <span className="badge badge-info"><Fingerprint size={13} /> {user.rfidUid}</span> : <span className="text-muted">Chưa đăng ký</span>}</td>
                   <td>{user.faceEmbedding ? <span className="badge badge-success"><Camera size={13} /> Đã có</span> : <span className="badge badge-neutral">Chưa có</span>}</td>
-                  <td><div className="row-actions"><button className="icon-btn" onClick={() => openEdit(user)} title="Chỉnh sửa"><Edit2 size={17} /></button><button className="icon-btn danger" onClick={() => handleDelete(user)} title="Xóa"><Trash2 size={17} /></button></div></td>
+                  <td><div className="row-actions"><button className="icon-btn" onClick={(event) => { event.stopPropagation(); openEdit(user); }} title="Chỉnh sửa"><Edit2 size={17} /></button><button className="icon-btn danger" onClick={(event) => { event.stopPropagation(); handleDelete(user); }} title="Xóa"><Trash2 size={17} /></button></div></td>
                 </tr>
               ))}
               {!loading && !filtered.length && <tr><td colSpan="5"><div className="empty-state">Không tìm thấy người dùng.</div></td></tr>}
