@@ -13,4 +13,6 @@ import java.util.UUID;
 public interface AttendanceRecordRepository extends JpaRepository<AttendanceRecord, UUID> {
     List<AttendanceRecord> findByUser(User user);
     List<AttendanceRecord> findByCheckInTimeBetween(OffsetDateTime start, OffsetDateTime end);
+    List<AttendanceRecord> findByUserAndCheckInTimeBetween(User user, OffsetDateTime start, OffsetDateTime end);
+    void deleteByUserId(UUID userId);
 }

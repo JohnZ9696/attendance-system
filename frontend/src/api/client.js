@@ -26,9 +26,22 @@ export const apiClient = {
   deleteUser: (id) => request(`/users/${id}`, { method: 'DELETE' }),
   getAttendanceRecords: () => request('/attendance'),
   getTodayAttendance: () => request('/attendance/today'),
+  deleteAttendanceRecord: (id) => request(`/attendance/${id}`, { method: 'DELETE' }),
+  getAssistanceRequests: () => request('/assistance'),
+  startRfidEnrollment: () => request('/rfid-enrollment/start', { method: 'POST' }),
+  getRfidEnrollment: () => request('/rfid-enrollment'),
+  cancelRfidEnrollment: () => request('/rfid-enrollment/cancel', { method: 'POST' }),
   getAttendanceBetween(start, end) {
     const params = new URLSearchParams({ start, end });
     return request(`/attendance/between?${params}`);
+  },
+  getSettings: () => request('/settings'),
+  updateSettings(settings) {
+    return request('/settings', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(settings),
+    });
   },
   recordAttendance(data) {
     const params = new URLSearchParams(data);
