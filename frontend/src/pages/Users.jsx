@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react';
 import { Camera, Edit2, Fingerprint, Plus, ScanLine, Search, Trash2, X } from 'lucide-react';
 import { apiClient } from '../api/client';
 import { Button, ErrorBanner, PageHeader, Panel } from '../components/ui';
+import { SkeletonTable } from '../components/Skeleton';
+import { useToast } from '../components/useToast.js';
 
 const emptyForm = { name: '', mssv: '', rfidUid: '', faceEmbedding: '' };
 const statusLabels = { IN: 'Vào', OUT: 'Ra', LATE: 'Đi muộn' };
@@ -24,6 +26,7 @@ export default function Users() {
   const [absenceRange, setAbsenceRange] = useState('month');
   const [dayOffs, setDayOffs] = useState([]);
   const [weeklyDayOffs, setWeeklyDayOffs] = useState([0, 6]);
+  const toast = useToast();
 
   const loadUsers = () => {
     setLoading(true);
@@ -134,6 +137,7 @@ export default function Users() {
     try {
       const saved = editingId ? await apiClient.updateUser(editingId, form) : await apiClient.createUser(form);
       setUsers((current) => editingId ? current.map((user) => user.id === editingId ? saved : user) : [saved, ...current]);
+      toast(editingId ? 'Đã cập nhật người dùng.' : 'Đã tạo người dùng mới.', 'success');
       closeForm();
       setEnrollment(null);
     } catch {
@@ -148,6 +152,7 @@ export default function Users() {
     try {
       await apiClient.deleteUser(user.id);
       setUsers((current) => current.filter((item) => item.id !== user.id));
+      toast(`Đã xóa ${user.name}.`, 'success');
       if (selectedUser?.id === user.id) closeDetail();
     } catch {
       setError('Không thể xóa người dùng này. Kiểm tra kết nối backend và thử lại.');
@@ -283,12 +288,12 @@ export default function Users() {
           <label className="search-field"><Search size={17} /><input value={keyword} onChange={(event) => setKeyword(event.target.value)} placeholder="Tìm theo tên, MSSV hoặc RFID" /></label>
           <span className="result-count">{filtered.length}/{users.length} người dùng</span>
         </div>
-        <div className="table-container">
+        <div className={`table-container${loading ? ' loading' : ''}`}>
           <table>
             <thead><tr><th>Người dùng</th><th>MSSV</th><th>RFID</th><th>Khuôn mặt</th><th></th></tr></thead>
             <tbody>
-              {filtered.map((user) => (
-                <tr key={user.id} className="row-clickable" onClick={() => openDetail(user)}>
+              {filtered.map((user, index) => (
+                <tr key={user.id} className="row-clickable" style={{ animationDelay: `${index * 25}ms` }} onClick={() => openDetail(user)}>
                   <td><div className="person-cell"><span className="initials">{user.name?.slice(0, 1) || '?'}</span><strong>{user.name}</strong></div></td>
                   <td className="cell-code">{user.mssv}</td>
                   <td>{user.rfidUid ? <span className="badge badge-info"><Fingerprint size={13} /> {user.rfidUid}</span> : <span className="text-muted">Chưa đăng ký</span>}</td>
@@ -297,7 +302,7 @@ export default function Users() {
                 </tr>
               ))}
               {!loading && !filtered.length && <tr><td colSpan="5"><div className="empty-state">Không tìm thấy người dùng.</div></td></tr>}
-              {loading && <tr><td colSpan="5"><div className="empty-state">Đang tải dữ liệu...</div></td></tr>}
+              {loading && <tr><td colSpan="5"><div className="empty-state"><SkeletonTable rows={6} cols={5} /></div></td></tr>}
             </tbody>
           </table>
         </div>

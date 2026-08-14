@@ -3,9 +3,17 @@ import { Activity, Clock3, RefreshCw, UserCheck, Users } from 'lucide-react';
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { apiClient } from '../api/client';
 import { Button, ErrorBanner, PageHeader, Panel } from '../components/ui';
+import { SkeletonCard, SkeletonChart } from '../components/Skeleton';
 
 const timeFormatter = new Intl.DateTimeFormat('vi-VN', { hour: '2-digit', minute: '2-digit' });
 const dateFormatter = new Intl.DateTimeFormat('vi-VN', { dateStyle: 'full' });
+
+function relativeTime(value) {
+  const minutes = Math.floor((Date.now() - value.getTime()) / 60000);
+  if (minutes < 1) return 'vừa xong';
+  if (minutes < 60) return `${minutes} phút trước`;
+  return timeFormatter.format(value);
+}
 
 function buildTimeline(records) {
   const hours = new Map();
@@ -67,10 +75,17 @@ export default function Dashboard() {
       <ErrorBanner message={error} onRetry={loadData} />
 
       <div className="stats-grid">
-        {stats.map(({ label, value, icon: Icon, tone }) => (
+        {loading ? (
+          <>
+            <SkeletonCard />
+            <SkeletonCard />
+            <SkeletonCard />
+            <SkeletonCard />
+          </>
+        ) : stats.map(({ label, value, icon: Icon, tone }) => (
           <Panel className="stat-panel" key={label}>
             <span className={`stat-icon tone-${tone}`}><Icon size={20} /></span>
-            <div><p>{label}</p><strong>{loading ? '...' : value}</strong></div>
+            <div><p>{label}</p><strong>{value}</strong></div>
           </Panel>
         ))}
       </div>
@@ -79,7 +94,7 @@ export default function Dashboard() {
         <Panel className="chart-panel">
           <div className="panel-heading"><div><h2>Nhịp điểm danh</h2><p>Số lượt ghi nhận theo giờ</p></div></div>
           <div className="chart-frame">
-            {timeline.length ? (
+            {loading ? <SkeletonChart /> : timeline.length ? (
               <ResponsiveContainer width="100%" height="100%">
                 <AreaChart data={timeline} margin={{ top: 8, right: 8, left: -20, bottom: 0 }}>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--border-color)" />
@@ -101,7 +116,7 @@ export default function Dashboard() {
               <div className="activity-row" key={record.id}>
                 <span className="initials">{record.user?.name?.slice(0, 1) || '?'}</span>
                 <div className="activity-person"><strong>{record.user?.name || 'Không xác định'}</strong><span>{record.user?.mssv || 'Chưa có MSSV'}</span></div>
-                <div className="activity-meta"><span className={`badge ${record.status === 'LATE' ? 'badge-warning' : 'badge-success'}`}>{record.status === 'LATE' ? 'Đi muộn' : 'Đúng giờ'}</span><time>{timeFormatter.format(new Date(record.checkInTime))}</time></div>
+                <div className="activity-meta"><span className={`badge ${record.status === 'LATE' ? 'badge-warning' : 'badge-success'}`}>{record.status === 'LATE' ? 'Đi muộn' : 'Đúng giờ'}</span><time>{relativeTime(new Date(record.checkInTime))}</time></div>
               </div>
             ))}
             {!recent.length && <div className="empty-state">Chưa có hoạt động.</div>}

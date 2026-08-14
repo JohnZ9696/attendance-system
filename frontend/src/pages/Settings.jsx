@@ -1,9 +1,11 @@
 import React, { useEffect, useState } from 'react';
 import { CalendarOff, ChevronLeft, ChevronRight, Save, X } from 'lucide-react';
 import { apiClient } from '../api/client';
+import { Skeleton } from '../components/Skeleton';
+import { useToast } from '../components/useToast.js';
 
 const WEEKDAY_LABELS = ['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN'];
-const WEEKDAY_INDEX = [1, 2, 3, 4, 5, 6, 0]; // label order -> JS Date.getDay()
+const WEEKDAY_INDEX = [1, 2, 3, 4, 5, 6, 0];
 
 const dateKey = (date) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
 
@@ -16,6 +18,7 @@ export default function Settings() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState('');
+  const toast = useToast();
 
   const loadSettings = async () => {
     setLoading(true);
@@ -47,9 +50,11 @@ export default function Settings() {
         dayOffs,
         weeklyDayOffs,
       });
-      setMessage('Đã lưu cài đặt.');
+      toast('Đã lưu cài đặt thành công.', 'success');
+      setMessage('Đã lưu thay đổi.');
     } catch {
-      setMessage('Không thể lưu cài đặt. Kiểm tra kết nối backend.');
+      toast('Không thể lưu cài đặt.', 'error');
+      setMessage('Không thể lưu cài đặt.');
     } finally {
       setSaving(false);
     }
@@ -82,7 +87,7 @@ export default function Settings() {
   })();
 
   return (
-    <div className="flex-col gap-6">
+    <div className="page-stack">
       <div className="flex items-center justify-between mb-2">
         <div>
           <h2>Cài đặt hệ thống</h2>
@@ -93,9 +98,13 @@ export default function Settings() {
           Lưu thay đổi
         </button>
       </div>
-
       {message && <div className="text-sm" style={{ color: 'var(--status-success)' }}>{message}</div>}
-
+      {loading ? (
+        <div className="flex-col gap-6" style={{ marginTop: 24 }}>
+          <div className="card"><Skeleton className="skeleton-card-label" style={{ marginBottom: 20 }} /><Skeleton className="skeleton-card-value" style={{ width: '60%' }} /><Skeleton className="skeleton-card-label" style={{ marginTop: 20, width: '40%' }} /></div>
+          <div className="card"><Skeleton className="skeleton-card-label" style={{ marginBottom: 20 }} /><Skeleton className="skeleton-card-value" style={{ width: '50%' }} /></div>
+        </div>
+      ) : (
       <div className="grid-content">
         <div className="flex-col gap-6" style={{ gridColumn: 'span 2' }}>
 
@@ -247,6 +256,7 @@ export default function Settings() {
           </ul>
         </div>
       </div>
+      )}
     </div>
   );
 }
