@@ -1,1 +1,66 @@
 24127345_24127346_24127475.pdf
+skills
+PLANS.md
+todo.md
+.env
+
+# Environment / secrets
+.env
+.env.*
+*.env
+!.env.example
+!**/.env.example
+.env.local
+.env.production
+.env.test
+
+# Backend (Spring Boot)
+backend/.env
+backend/src/main/resources/application-local.properties
+backend/src/main/resources/application-private.properties
+backend/target/
+backend/**/target/
+backend/*.log
+
+# AI service (Python)
+ai-service/.venv/
+ai-service/**/__pycache__/
+ai-service/**/*.py[cod]
+ai-service/.pytest_cache/
+ai-service/.mypy_cache/
+
+# ESP32 service (PlatformIO)
+esp32-service/.pio/
+
+# Credentials / keys
+*.pem
+*.key
+*.p12
+*.jks
+*.pfx
+*.gpg
+credentials
+secrets
+
+# Logs
+logs
+*.log
+npm-debug.log*
+
+# Frontend
+frontend/node_modules/
+frontend/dist/
+frontend/dist-ssr/
+
+# Editor / OS
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+opencode.json
