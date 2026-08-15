@@ -45,7 +45,12 @@ bool ledState = false;
 
 // ============================================================================
 // WiFi Connection
-// ============================================================================
+/**
+ * @brief Connects the device to the configured Wi-Fi network.
+ *
+ * Blinks the flash LED while waiting for the connection and leaves it on once
+ * the connection is established.
+ */
 void connectWiFi() {
   if (WiFi.status() == WL_CONNECTED) return;
   
@@ -68,7 +73,11 @@ void connectWiFi() {
 
 // ============================================================================
 // Camera Initialization
-// ============================================================================
+/**
+ * @brief Initializes the camera for VGA JPEG capture.
+ *
+ * @return `true` if initialization succeeds, `false` otherwise.
+ */
 bool initCamera() {
   camera_config_t config;
   config.ledc_channel = LEDC_CHANNEL_0;
@@ -108,7 +117,11 @@ bool initCamera() {
 
 // ============================================================================
 // ISO-8601 Timestamp Approximation
-// ============================================================================
+/**
+ * @brief Formats the current local time as an ISO 8601 timestamp.
+ *
+ * @return String ISO 8601 timestamp, or an empty string when the time is unavailable.
+ */
 String getIsoTimestamp() {
   // Normally sync with NTP. Here returning empty to let server set it, 
   // or a placeholder if required. For multipart it's a form field.
@@ -125,7 +138,13 @@ String getIsoTimestamp() {
 
 // ============================================================================
 // Capture and Send Frame
-// ============================================================================
+/**
+ * @brief Attempts to capture and upload a camera frame as multipart form data.
+ *
+ * The upload includes the camera ID, an available timestamp, and the JPEG frame.
+ * Captures are limited to the configured frame interval and skipped when Wi-Fi is
+ * disconnected or camera capture fails.
+ */
 void captureAndSend() {
   if (millis() - lastFrameMs < FRAME_INTERVAL_MS) {
     return;
@@ -193,6 +212,14 @@ void captureAndSend() {
   esp_camera_fb_return(fb);
 }
 
+/**
+ * @brief Captures and uploads a JPEG frame as multipart form data.
+ *
+ * The upload includes the configured camera ID, an available timestamp, and
+ * the captured image. Captures are limited to the configured frame interval
+ * and skipped when Wi-Fi is disconnected or capture or memory allocation
+ * fails.
+ */
 void sendFrameRaw() {
   if (millis() - lastFrameMs < FRAME_INTERVAL_MS) {
     return;
@@ -264,6 +291,11 @@ void sendFrameRaw() {
 }
 
 
+/**
+ * @brief Initializes serial communication, the flash LED, Wi-Fi, time synchronization, and the camera.
+ *
+ * Repeatedly attempts camera initialization until it succeeds.
+ */
 void setup() {
   Serial.begin(115200);
   pinMode(FLASH_LED_PIN, OUTPUT);
@@ -278,6 +310,9 @@ void setup() {
   }
 }
 
+/**
+ * @brief Maintains the Wi-Fi connection indicator and sends periodic camera frames.
+ */
 void loop() {
   if (WiFi.status() != WL_CONNECTED) {
     if (millis() - lastBlinkMs > BLINK_INTERVAL_MS) {

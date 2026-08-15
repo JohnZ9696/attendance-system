@@ -21,6 +21,9 @@ const yesterdayKey = shiftDate(now, -1);
 const statusLabels = { ON_TIME: 'Đúng giờ', LATE: 'Đi muộn' };
 const statusBadge = { ON_TIME: 'badge-success', LATE: 'badge-warning' };
 
+/**
+ * Display attendance history with date, keyword, and status filters, pagination, and Excel export.
+ */
 export default function History() {
   const [records, setRecords] = useState([]);
   const [filters, setFilters] = useState({ keyword: '', date: todayKey, status: 'ALL' });

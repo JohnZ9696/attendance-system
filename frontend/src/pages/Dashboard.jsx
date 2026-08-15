@@ -29,6 +29,10 @@ function buildTimeline(records) {
   return [...hours.values()].sort((a, b) => a.time.localeCompare(b.time));
 }
 
+/**
+ * Render the attendance overview dashboard for the current day.
+ * @returns {JSX.Element} The dashboard interface.
+ */
 export default function Dashboard() {
   const [data, setData] = useState({ users: [], records: [] });
   const [loading, setLoading] = useState(true);

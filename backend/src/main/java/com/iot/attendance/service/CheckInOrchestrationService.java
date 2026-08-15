@@ -19,6 +19,12 @@ public class CheckInOrchestrationService {
         this.fastApiClient = fastApiClient;
     }
 
+    /**
+     * Processes an RFID scan by locating the active student and initiating face verification.
+     *
+     * @param rfidUid the scanned RFID identifier, with colons and whitespace ignored
+     * @throws RuntimeException if no active student matches the scanned identifier
+     */
     public void handleRfidScan(String deviceId, String rfidUid) {
         String normalizedUid = rfidUid.toUpperCase().replaceAll("[:\\s]", "");
         Student student = studentRepository.findByUidAndIsActiveTrue(normalizedUid)

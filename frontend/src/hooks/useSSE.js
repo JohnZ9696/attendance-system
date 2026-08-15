@@ -1,5 +1,10 @@
 import { useState, useEffect } from 'react';
 
+/**
+ * Manages a Server-Sent Events connection for the specified endpoint.
+ * @param {string} endpoint - The API endpoint to subscribe to.
+ * @return {{events: Array, connected: boolean}} The received events and current connection status.
+ */
 export function useSSE(endpoint) {
   const [events, setEvents] = useState([]);
   const [connected, setConnected] = useState(false);

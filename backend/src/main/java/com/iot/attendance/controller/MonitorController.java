@@ -16,6 +16,11 @@ public class MonitorController {
         this.service = service;
     }
 
+    /**
+     * Streams monitor events to a connected client.
+     *
+     * @return the server-sent event emitter for the monitor event stream
+     */
     @GetMapping("/events")
     public SseEmitter streamEvents() {
         return service.subscribe();

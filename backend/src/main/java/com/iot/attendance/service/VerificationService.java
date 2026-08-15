@@ -12,10 +12,20 @@ import java.time.OffsetDateTime;
 public class VerificationService {
     private final VerificationLogRepository repository;
 
+    /**
+     * Creates a verification service.
+     */
     public VerificationService(VerificationLogRepository repository) {
         this.repository = repository;
     }
 
+    /**
+     * Creates and persists a pending verification log for a student and scanned UID.
+     *
+     * @param student   the student associated with the verification
+     * @param scannedUid the UID scanned for the verification
+     * @return the persisted pending verification log
+     */
     public VerificationLog createPendingVerification(Student student, String scannedUid) {
         VerificationLog log = new VerificationLog();
         log.setStudent(student);

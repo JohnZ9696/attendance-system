@@ -6,6 +6,18 @@ import java.util.Optional;
 import java.util.UUID;
 
 public interface StudentRepository extends JpaRepository<Student, UUID> {
-    Optional<Student> findByMssvAndIsActiveTrue(String mssv);
-    Optional<Student> findByUidAndIsActiveTrue(String uid);
+    /**
+ * Finds an active student by their student identification number.
+ *
+ * @param mssv the student's identification number
+ * @return the matching active student, if found
+ */
+Optional<Student> findByMssvAndIsActiveTrue(String mssv);
+    /**
+ * Finds an active student by UID.
+ *
+ * @param uid the student's UID
+ * @return the matching active student, if found
+ */
+Optional<Student> findByUidAndIsActiveTrue(String uid);
 }

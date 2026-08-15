@@ -10,6 +10,10 @@ const emptyForm = { name: '', mssv: '', rfidUid: '', is_active: true };
 const statusLabels = { ON_TIME: 'Đúng giờ', LATE: 'Đi muộn' };
 const statusBadge = { ON_TIME: 'badge-success', LATE: 'badge-warning' };
 
+/**
+ * Manage user records, RFID enrollment, face registration, attendance history, and absence statistics.
+ * @return {JSX.Element} The user management interface.
+ */
 export default function Users() {
   const { role } = useAuth();
   const [users, setUsers] = useState([]);

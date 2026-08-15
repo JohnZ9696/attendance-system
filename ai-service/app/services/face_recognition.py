@@ -8,6 +8,15 @@ settings = get_settings()
 MODEL_NAME = "Facenet512"
 
 def get_face_embedding(frame: np.ndarray):
+    """
+    Extract the first detected face embedding from a BGR image frame.
+    
+    Parameters:
+        frame (np.ndarray): Image frame in BGR color format.
+    
+    Returns:
+        The first detected face embedding, or None if no face is detected or processing fails.
+    """
     try:
         # Convert BGR to RGB for DeepFace
         img_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
@@ -26,6 +35,16 @@ def calculate_similarity_percent(embedding1, embedding2) -> float:
     # Cosine distance = 1 - cosine_similarity
     # similarity_percent = cosine_similarity * 100
     
+    """
+    Calculate the similarity percentage between two embedding vectors.
+    
+    Parameters:
+        embedding1: The first embedding vector.
+        embedding2: The second embedding vector.
+    
+    Returns:
+        float: A cosine similarity percentage clamped between 0.0 and 100.0. Returns 0.0 if either vector has zero magnitude.
+    """
     vec1 = np.array(embedding1)
     vec2 = np.array(embedding2)
     

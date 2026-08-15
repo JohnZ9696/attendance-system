@@ -15,14 +15,25 @@ settings = get_settings()
 
 class FrameBuffer:
     def __init__(self, max_len=30, max_age_ms=15000):
+        """
+        Initialize a bounded frame buffer with a maximum frame age.
+        
+        Parameters:
+        	max_len (int): Maximum number of frames the buffer can hold.
+        	max_age_ms (int): Maximum age of stored frames in milliseconds.
+        """
         self.frames = deque(maxlen=max_len)
         self.max_age_ms = max_age_ms
         
     def add_frame(self, frame: np.ndarray):
+        """Store a camera frame with its current timestamp."""
         now_ms = int(time.time() * 1000)
         self.frames.append((now_ms, frame))
         
     def get_recent_frames(self) -> List[np.ndarray]:
+        """
+        Return frames captured within the configured maximum age.
+        """
         now_ms = int(time.time() * 1000)
         # Filter old frames
         valid = [f for t, f in self.frames if now_ms - t <= self.max_age_ms]
@@ -32,11 +43,28 @@ class FrameBuffer:
 camera_buffers: Dict[str, FrameBuffer] = {}
 
 def get_buffer(camera_id: str) -> FrameBuffer:
+    """Retrieve the frame buffer associated with a camera, creating it when necessary.
+    
+    Parameters:
+    	camera_id (str): Identifier of the camera.
+    
+    Returns:
+    	FrameBuffer: The camera's frame buffer.
+    """
     if camera_id not in camera_buffers:
         camera_buffers[camera_id] = FrameBuffer()
     return camera_buffers[camera_id]
 
 async def run_verification(req: VerificationRequest) -> VerificationResponse:
+    """
+    Verify a user against camera frames using face similarity and blink-based liveness.
+    
+    Parameters:
+    	req (VerificationRequest): Verification request containing the expected user, camera, session, and timeout details.
+    
+    Returns:
+    	VerificationResponse: Verification result with similarity, liveness status, model metadata, and failure reason when applicable.
+    """
     start_time = int(time.time() * 1000)
     timeout_ms = req.timeoutMs or settings.capture_liveness_timeout_ms
     
@@ -44,6 +72,18 @@ async def run_verification(req: VerificationRequest) -> VerificationResponse:
     expected_embedding = await get_student_embedding(str(req.expectedUserId))
     
     def create_resp(result, sim=0.0, liveness=False, reason=None):
+        """
+        Create a verification response populated with session, user, camera, similarity, liveness, and model details.
+        
+        Parameters:
+            result: Verification outcome.
+            sim: Face similarity percentage.
+            liveness: Whether liveness verification passed.
+            reason: Optional explanation for a failed verification.
+        
+        Returns:
+            VerificationResponse: A structured verification result.
+        """
         return VerificationResponse(
             verificationSessionId=req.sessionId,
             expectedUserId=req.expectedUserId,

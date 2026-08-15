@@ -15,6 +15,12 @@ import java.io.IOException;
 @RequestMapping("/api/v1/reports")
 public class ReportController {
 
+    /**
+     * Exports an attendance workbook as a downloadable Excel file.
+     *
+     * @return the generated XLSX file response
+     * @throws IOException if the workbook cannot be written
+     */
     @GetMapping("/attendance.xlsx")
     public ResponseEntity<byte[]> exportExcel() throws IOException {
         try (Workbook workbook = new XSSFWorkbook(); ByteArrayOutputStream out = new ByteArrayOutputStream()) {

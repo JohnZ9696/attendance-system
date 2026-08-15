@@ -5,6 +5,9 @@ import { apiClient } from '../api/client';
 import { useAuth } from '../contexts/AuthContext';
 import './DashboardLayout.css';
 
+/**
+ * Displays the current time and localized Vietnamese date, updating every second.
+ */
 function LiveClock() {
   const [now, setNow] = useState(new Date());
   useEffect(() => {
@@ -14,6 +17,9 @@ function LiveClock() {
   return <span className="header-clock" title={now.toLocaleDateString('vi-VN', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' })}>{now.toLocaleTimeString('vi-VN')}</span>;
 }
 
+/**
+ * Render the authenticated dashboard layout with role-based navigation, user information, and nested route content.
+ */
 export default function DashboardLayout() {
   const [menuOpen, setMenuOpen] = useState(false);
   const { user, role, logout } = useAuth();

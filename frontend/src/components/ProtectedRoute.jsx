@@ -1,6 +1,11 @@
 import { Navigate, Outlet } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 
+/**
+ * Protect nested routes using authentication and role-based access checks.
+ * @param {string[]} [allowedRoles] - Roles permitted to access the nested routes.
+ * @returns {JSX.Element} The nested route outlet, or a redirect for unauthorized users.
+ */
 export default function ProtectedRoute({ allowedRoles }) {
   const { token, role } = useAuth();
 

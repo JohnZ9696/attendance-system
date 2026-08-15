@@ -78,6 +78,9 @@ unsigned long lastEnrollmentPollMs = 0UL;
 // ----------------------------------------------------------------------------
 void setBuzzer(bool on) { digitalWrite(BUZZER_PIN, on ? HIGH : LOW); }
 
+/**
+ * @brief Turns off both LEDs and the buzzer.
+ */
 void allOff() {
   digitalWrite(LED_GREEN_PIN, LOW);
   digitalWrite(LED_RED_PIN, LOW);
@@ -86,7 +89,11 @@ void allOff() {
 
 // ----------------------------------------------------------------------------
 // WiFi & NTP
-// ----------------------------------------------------------------------------
+/**
+ * @brief Connects the device to the configured Wi-Fi network.
+ *
+ * @return `true` if the device is connected to Wi-Fi within the configured timeout, `false` otherwise.
+ */
 bool connectToWifi() {
   if (WiFi.status() == WL_CONNECTED) return true;
 
@@ -112,6 +119,9 @@ bool connectToWifi() {
   return false;
 }
 
+/**
+ * @brief Synchronizes the system clock with network time servers when Wi-Fi is connected.
+ */
 void syncTime() {
   if (WiFi.status() != WL_CONNECTED) return;
   configTime(0, 0, "pool.ntp.org", "time.nist.gov");
@@ -139,6 +149,11 @@ String getIsoTimestamp() {
 // ----------------------------------------------------------------------------
 String workingBase = "";
 
+/**
+ * @brief Selects and returns the configured backend API base URL.
+ *
+ * @return String The selected API base URL, or an empty string if Wi-Fi connection fails.
+ */
 String getApiBase() {
   if (workingBase.length() > 0) return workingBase;
   if (!connectToWifi()) return "";
@@ -151,7 +166,9 @@ String getApiBase() {
 
 // ----------------------------------------------------------------------------
 // API calls
-// ----------------------------------------------------------------------------
+/**
+ * @brief Sends a periodic heartbeat for the device to the backend.
+ */
 
 void sendHeartbeat() {
   if (millis() - lastHeartbeatMs < HEARTBEAT_INTERVAL_MS) return;
@@ -168,6 +185,9 @@ void sendHeartbeat() {
   http.end();
 }
 
+/**
+ * @brief Submits a hardware help incident for the device.
+ */
 void sendHelpRequest() {
   const String apiBase = getApiBase();
   if (apiBase.length() == 0 || !connectToWifi()) {
@@ -200,6 +220,9 @@ void sendHelpRequest() {
   }
 }
 
+/**
+ * @brief Polls the backend for the current RFID enrollment command and updates enrollment mode.
+ */
 void pollEnrollmentCommand() {
   if (millis() - lastEnrollmentPollMs < ENROLLMENT_POLL_MS || WiFi.status() != WL_CONNECTED) return;
   lastEnrollmentPollMs = millis();
@@ -224,6 +247,12 @@ void pollEnrollmentCommand() {
   http.end();
 }
 
+/**
+ * @brief Submits an RFID UID for enrollment.
+ *
+ * @param uid RFID UID to enroll.
+ * @return true if the enrollment request receives an HTTP 200 response, false otherwise.
+ */
 bool submitEnrollmentUid(const String& uid) {
   const String apiBase = getApiBase();
   if (apiBase.length() == 0 || !connectToWifi()) return false;
@@ -243,6 +272,15 @@ bool submitEnrollmentUid(const String& uid) {
   return code == HTTP_CODE_OK;
 }
 
+/**
+ * @brief Submits an RFID scan for attendance processing.
+ *
+ * Displays feedback based on the server response, including check-in status,
+ * RFID validation, camera and face-matching results, duplicate check-ins, and
+ * cloud communication failures.
+ *
+ * @param uid RFID card UID to submit.
+ */
 void sendRfidScan(const String& uid) {
   const String apiBase = getApiBase();
   if (apiBase.length() == 0 || !connectToWifi()) {
@@ -294,13 +332,23 @@ void sendRfidScan(const String& uid) {
 
 // ----------------------------------------------------------------------------
 // Feedback state machine
-// ----------------------------------------------------------------------------
+/**
+ * @brief Starts the specified feedback state and resets its outputs.
+ *
+ * @param state Feedback state to activate.
+ */
 void startFeedback(FeedbackState state) {
   feedbackState = state;
   stateStartMs  = millis();
   allOff();
 }
 
+/**
+ * @brief Updates the LEDs and buzzer for the active feedback state.
+ *
+ * Ends the feedback sequence after its configured duration and returns the
+ * device to the idle state.
+ */
 void updateFeedback() {
   if (feedbackState == FeedbackState::IDLE) return;
   const unsigned long elapsed = millis() - stateStartMs;
@@ -369,7 +417,11 @@ void updateFeedback() {
 
 // ----------------------------------------------------------------------------
 // RFID
-// ----------------------------------------------------------------------------
+/**
+ * @brief Reads the UID of a newly presented RFID card.
+ *
+ * @return String The card UID as an uppercase hexadecimal string, or an empty string when no card is available.
+ */
 String readCardUid() {
   if (!rfid.PICC_IsNewCardPresent() || !rfid.PICC_ReadCardSerial()) return "";
   String uid = "";
@@ -381,6 +433,13 @@ String readCardUid() {
   return uid;
 }
 
+/**
+ * @brief Processes a detected RFID card for enrollment or attendance scanning.
+ *
+ * Ignores scans during active feedback and the card cooldown period. Successful
+ * enrollment exits enrollment mode and displays confirmation feedback; other
+ * scans are submitted as attendance records.
+ */
 void handleRfidScan() {
   if (feedbackState != FeedbackState::IDLE) return;
   static unsigned long lastScanMs = 0UL;
@@ -412,7 +471,9 @@ void handleRfidScan() {
 
 // ----------------------------------------------------------------------------
 // Button
-// ----------------------------------------------------------------------------
+/**
+ * @brief Processes the help button state and submits a help request after a debounced press.
+ */
 void handleButton() {
   const bool reading = digitalRead(BUTTON_PIN);
   if (reading != lastButtonReading) {
@@ -434,7 +495,9 @@ void handleButton() {
 
 // ============================================================================
 // Setup / Loop
-// ============================================================================
+/**
+ * @brief Initializes serial communication, peripherals, network connectivity, time synchronization, and the RFID reader.
+ */
 void setup() {
   Serial.begin(115200);
   delay(500);
@@ -453,6 +516,9 @@ void setup() {
   Serial.println("RFID Attendance System ready");
 }
 
+/**
+ * @brief Processes device input, enrollment commands, feedback, and heartbeat updates.
+ */
 void loop() {
   handleButton();
   pollEnrollmentCommand();

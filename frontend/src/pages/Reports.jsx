@@ -5,6 +5,9 @@ import { ErrorBanner } from '../components/ui';
 
 const COLORS = ['var(--status-success)', 'var(--status-warning)', 'var(--status-error)'];
 
+/**
+ * Display attendance reports, weekly trends, today's attendance distribution, and late-arrival metrics.
+ */
 export default function Reports() {
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);

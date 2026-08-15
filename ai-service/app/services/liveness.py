@@ -17,10 +17,30 @@ RIGHT_EYE = [33, 160, 158, 133, 153, 144]
 EAR_THRESHOLD = 0.21
 
 def euclidean_distance(p1, p2):
+    """
+    Calculate the 2D Euclidean distance between two landmark points.
+    
+    Parameters:
+    	p1: The first landmark point.
+    	p2: The second landmark point.
+    
+    Returns:
+    	float: The Euclidean distance between the points.
+    """
     return math.dist([p1.x, p1.y], [p2.x, p2.y])
 
 def get_ear(landmarks, eye_indices):
     # vertical
+    """
+    Calculate the eye aspect ratio from eye landmark coordinates.
+    
+    Parameters:
+        landmarks: Landmark points used to measure the eye.
+        eye_indices: Indices identifying the eye's horizontal and vertical landmarks.
+    
+    Returns:
+        The eye aspect ratio, or 0 if the horizontal eye distance is zero.
+    """
     v1 = euclidean_distance(landmarks[eye_indices[1]], landmarks[eye_indices[5]])
     v2 = euclidean_distance(landmarks[eye_indices[2]], landmarks[eye_indices[4]])
     # horizontal
@@ -32,7 +52,15 @@ def get_ear(landmarks, eye_indices):
     return ear
 
 def process_liveness(frame: np.ndarray) -> bool:
-    """ Returns True if eyes are closed (blink state) in this frame """
+    """
+    Determine whether the detected face is blinking or has closed eyes.
+    
+    Parameters:
+        frame (np.ndarray): BGR image frame to analyze.
+    
+    Returns:
+        bool: `True` if the average eye aspect ratio is below the blink threshold, `False` if no face is detected or the eyes are open.
+    """
     img_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
     results = face_mesh.process(img_rgb)
     

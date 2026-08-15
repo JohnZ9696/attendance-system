@@ -1,5 +1,13 @@
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080/api/v1';
 
+/**
+ * Sends an authenticated request to the API and parses the response.
+ * Unauthorized responses clear session data and redirect to the login page.
+ * @param {string} path - The API endpoint path.
+ * @param {RequestInit} [options={}] - Fetch request options.
+ * @returns {Promise<Object|Array|Blob|null>} The parsed response data, a spreadsheet blob, or null for a 204 response.
+ * @throws {Error} If the response is unauthorized or has a non-success status.
+ */
 async function request(path, options = {}) {
   const token = localStorage.getItem('token');
   const headers = {

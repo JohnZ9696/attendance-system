@@ -10,6 +10,9 @@ const WEEKDAY_INDEX = [1, 2, 3, 4, 5, 6, 0];
 
 const dateKey = (date) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
 
+/**
+ * Render the system settings page for attendance, face recognition, and days off.
+ */
 export default function Settings() {
   const { role } = useAuth();
   const [cutoffTime, setCutoffTime] = useState('07:30:00');

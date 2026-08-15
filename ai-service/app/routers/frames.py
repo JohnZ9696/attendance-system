@@ -14,6 +14,20 @@ async def upload_frame(
     request: Request,
     image: Annotated[UploadFile, File()]
 ):
+    """
+    Upload a JPEG or PNG frame to a camera buffer.
+    
+    Parameters:
+        camera_id (str): Identifier of the camera receiving the frame.
+        image (UploadFile): JPEG or PNG image no larger than 5 MiB.
+    
+    Returns:
+        dict: A status object containing ``{"status": "ok"}``.
+    
+    Raises:
+        HTTPException: If authentication fails, the media type is unsupported,
+            the payload exceeds 5 MiB, or the image content cannot be decoded.
+    """
     api_key = request.headers.get("INTERNAL-API-KEY")
     if api_key != settings.internal_api_key:
         raise HTTPException(status_code=401, detail="Invalid API Key")

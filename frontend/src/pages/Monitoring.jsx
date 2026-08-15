@@ -2,6 +2,10 @@ import React, { useMemo } from 'react';
 import { Camera, Wifi, CheckCircle, AlertCircle } from 'lucide-react';
 import { useSSE } from '../hooks/useSSE';
 
+/**
+ * Displays live event logs and connection statuses for monitored devices.
+ * @return {JSX.Element} The monitoring dashboard.
+ */
 export default function Monitoring() {
   const { events, connected } = useSSE('/monitor/events');
 

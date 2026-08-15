@@ -17,6 +17,10 @@ const statusLabels = {
   RESOLVED: 'Đã giải quyết'
 };
 
+/**
+ * Displays support requests and equipment incidents with status management for lead proctors.
+ * @returns {JSX.Element} The support and incident management interface.
+ */
 export default function Support() {
   const { role } = useAuth();
   const [incidents, setIncidents] = useState([]);

@@ -23,6 +23,14 @@ public class AttendanceService {
         this.attendanceLogRepository = attendanceLogRepository;
     }
 
+    /**
+     * Records a student's attendance based on the current time in the Ho Chi Minh timezone.
+     *
+     * @param student the student whose attendance is being recorded
+     * @param verificationLog the verification log associated with the attendance
+     * @return the saved attendance log
+     * @throws RuntimeException if the student has already checked in
+     */
     public AttendanceLog recordAttendance(Student student, VerificationLog verificationLog) {
         ZoneId zoneId = ZoneId.of("Asia/Ho_Chi_Minh");
         ZonedDateTime now = ZonedDateTime.now(zoneId);

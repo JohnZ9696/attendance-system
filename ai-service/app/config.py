@@ -14,4 +14,5 @@ class Settings(BaseSettings):
 
 @lru_cache
 def get_settings() -> Settings:
+    """Create and return the application settings instance."""
     return Settings()

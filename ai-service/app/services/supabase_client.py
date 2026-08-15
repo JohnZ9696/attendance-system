@@ -7,6 +7,15 @@ settings = get_settings()
 supabase: Client = create_client(settings.supabase_url, settings.supabase_service_key)
 
 async def get_student_embedding(user_id: str) -> Optional[List[float]]:
+    """
+    Retrieve the face embedding for an active student.
+    
+    Parameters:
+        user_id (str): Identifier of the student.
+    
+    Returns:
+        Optional[List[float]]: The student's face embedding, or None if the student is unavailable, inactive, or has an unsupported embedding format.
+    """
     try:
         response = supabase.table("students").select("face_embedding, is_active").eq("id", user_id).execute()
         if not response.data:

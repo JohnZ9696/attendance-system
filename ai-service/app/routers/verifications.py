@@ -8,6 +8,18 @@ settings = get_settings()
 
 @router.post("", tags=["verifications"], response_model=VerificationResponse)
 async def create_verification(req: VerificationRequest, request: Request):
+    """
+    Run a verification request after validating the internal API key.
+    
+    Parameters:
+        req (VerificationRequest): Verification details to process.
+    
+    Returns:
+        VerificationResponse: The verification result.
+    
+    Raises:
+        HTTPException: If the internal API key is invalid.
+    """
     api_key = request.headers.get("INTERNAL-API-KEY")
     if api_key != settings.internal_api_key:
         raise HTTPException(status_code=401, detail="Invalid API Key")
@@ -17,6 +29,16 @@ async def create_verification(req: VerificationRequest, request: Request):
 
 @router.get("/{session_id}", tags=["verifications"])
 async def get_verification(session_id: str, request: Request):
+    """
+    Retrieve the status of a verification session.
+    
+    Parameters:
+    	session_id (str): Identifier of the verification session.
+    	request (Request): Request containing the internal API key.
+    
+    Raises:
+    	HTTPException: With status 401 when the API key is invalid, or status 501 because asynchronous polling is not implemented.
+    """
     api_key = request.headers.get("INTERNAL-API-KEY")
     if api_key != settings.internal_api_key:
         raise HTTPException(status_code=401, detail="Invalid API Key")

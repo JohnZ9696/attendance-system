@@ -12,6 +12,9 @@ import Login from './pages/Login';
 import ProtectedRoute from './components/ProtectedRoute';
 import { AuthProvider } from './contexts/AuthContext';
 
+/**
+ * Configures authentication and client-side routes for the application.
+ */
 function App() {
   return (
     <AuthProvider>

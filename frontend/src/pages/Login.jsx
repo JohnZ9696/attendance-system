@@ -4,6 +4,9 @@ import { useAuth } from '../contexts/AuthContext';
 import { apiClient } from '../api/client';
 import { Button, ErrorBanner, Panel } from '../components/ui';
 
+/**
+ * Render the system login page and authenticate submitted credentials.
+ */
 export default function Login() {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
