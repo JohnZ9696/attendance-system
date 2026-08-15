@@ -5,34 +5,37 @@ import numpy as np
 from app.services.verification_manager import get_buffer
 from app.config import get_settings
 
+
 router = APIRouter(prefix="/internal/v1/cameras")
 settings = get_settings()
+
 
 @router.post("/{camera_id}/frames", tags=["frames"])
 async def upload_frame(
     camera_id: str,
     request: Request,
-    image: Annotated[UploadFile, File()]
+    image: Annotated[UploadFile, File()],
 ):
-    api_key = request.headers.get("INTERNAL-API-KEY")
-    if api_key != settings.internal_api_key:
-        raise HTTPException(status_code=401, detail="Invalid API Key")
-        
-    if image.content_type not in ["image/jpeg", "image/png"]:
-        raise HTTPException(status_code=415, detail="Unsupported media type")
-        
+    provided = request.headers.get("INTERNAL-API-KEY", "")
+    if not settings.internal_api_key or not provided:
+        raise HTTPException(status_code=401, detail="Invalid API key")
+    if not __import__("secrets").compare_digest(provided, settings.internal_api_key):
+        raise HTTPException(status_code=401, detail="Invalid API key")
+
+    if image.content_type not in {"image/jpeg", "image/png"}:
+        raise HTTPException(status_code=415, detail="Only JPEG or PNG is accepted")
+
     content = await image.read()
-    if len(content) > 5 * 1024 * 1024:
-        raise HTTPException(status_code=413, detail="Payload too large")
-        
+    if not content or len(content) > settings.max_image_bytes:
+        raise HTTPException(status_code=413, detail="Image is empty or larger than 5 MB")
+
     # Decode image
     nparr = np.frombuffer(content, np.uint8)
     frame = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
-    
+
     if frame is None:
         raise HTTPException(status_code=400, detail="Invalid image content")
-        
-    buffer = get_buffer(camera_id)
-    buffer.add_frame(frame)
-    
+
+    get_buffer(camera_id).add_frame(frame)
+
     return {"status": "ok"}

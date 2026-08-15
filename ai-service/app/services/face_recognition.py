@@ -1,46 +1,78 @@
-import numpy as np
-import cv2
-from deepface import DeepFace
-from app.config import get_settings
+from dataclasses import dataclass
+from typing import Optional
 
-settings = get_settings()
+import cv2
+import numpy as np
+from deepface import DeepFace
+
 
 MODEL_NAME = "Facenet512"
+MODEL_VERSION = "deepface-0.0.93"
+EXPECTED_DIMENSION = 512
 
-def get_face_embedding(frame: np.ndarray):
+
+@dataclass
+class FaceEmbeddingResult:
+    embedding: Optional[list[float]]
+    face_count: int
+    blur_score: float
+    error: Optional[str] = None
+
+
+def extract_face_embedding(
+    frame: np.ndarray,
+    require_enrollment_quality: bool = False,
+) -> FaceEmbeddingResult:
+    if frame is None or frame.size == 0:
+        return FaceEmbeddingResult(None, 0, 0.0, "INVALID_IMAGE")
+
+    height, width = frame.shape[:2]
+    gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+    blur_score = float(cv2.Laplacian(gray, cv2.CV_64F).var())
+
+    if require_enrollment_quality:
+        if min(height, width) < 240:
+            return FaceEmbeddingResult(None, 0, blur_score, "IMAGE_TOO_SMALL")
+        if blur_score < 40.0:
+            return FaceEmbeddingResult(None, 0, blur_score, "IMAGE_TOO_BLURRY")
+
     try:
-        # Convert BGR to RGB for DeepFace
-        img_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-        
-        # enforce_detection=True will raise an exception if no face is found
-        results = DeepFace.represent(img_path=img_rgb, model_name=MODEL_NAME, enforce_detection=True)
-        if results and len(results) > 0:
-            # Return first detected face embedding
-            return results[0]["embedding"]
-    except Exception as e:
-        # No face found or other error
-        pass
-    return None
+        results = DeepFace.represent(
+            img_path=frame,
+            model_name=MODEL_NAME,
+            detector_backend="opencv",
+            enforce_detection=True,
+            align=True,
+            normalization="Facenet",
+        )
+    except ValueError:
+        return FaceEmbeddingResult(None, 0, blur_score, "NO_FACE")
+    except Exception:
+        return FaceEmbeddingResult(None, 0, blur_score, "MODEL_ERROR")
 
-def calculate_similarity_percent(embedding1, embedding2) -> float:
-    # Cosine distance = 1 - cosine_similarity
-    # similarity_percent = cosine_similarity * 100
-    
-    vec1 = np.array(embedding1)
-    vec2 = np.array(embedding2)
-    
-    dot_product = np.dot(vec1, vec2)
-    norm_a = np.linalg.norm(vec1)
-    norm_b = np.linalg.norm(vec2)
-    
-    if norm_a == 0 or norm_b == 0:
+    if len(results) != 1:
+        return FaceEmbeddingResult(None, len(results), blur_score, "MULTIPLE_FACES")
+
+    embedding = [float(value) for value in results[0]["embedding"]]
+    if len(embedding) != EXPECTED_DIMENSION:
+        return FaceEmbeddingResult(None, 1, blur_score, "INVALID_EMBEDDING_DIMENSION")
+
+    return FaceEmbeddingResult(embedding, 1, blur_score)
+
+
+def calculate_similarity_percent(
+    expected_embedding: list[float],
+    current_embedding: list[float],
+) -> float:
+    expected = np.asarray(expected_embedding, dtype=np.float32)
+    current = np.asarray(current_embedding, dtype=np.float32)
+
+    if expected.shape != current.shape or expected.size == 0:
         return 0.0
-        
-    cosine_similarity = dot_product / (norm_a * norm_b)
-    
-    # Cosine similarity is between -1 and 1
-    # Convert to percentage 0-100
-    percent = cosine_similarity * 100.0
-    
-    # Clamp
-    return float(max(0.0, min(100.0, percent)))
+
+    denominator = float(np.linalg.norm(expected) * np.linalg.norm(current))
+    if denominator == 0.0:
+        return 0.0
+
+    cosine_similarity = float(np.dot(expected, current) / denominator)
+    return round(max(0.0, min(100.0, cosine_similarity * 100.0)), 2)

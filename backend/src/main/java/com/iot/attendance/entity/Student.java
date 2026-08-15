@@ -38,12 +38,6 @@ public class Student {
     @Column(name = "face_embedding", columnDefinition = "jsonb")
     private String faceEmbedding;
 
-    @Column(name = "face_model")
-    private String faceModel;
-
-    @Column(name = "embedding_dimension")
-    private Integer embeddingDimension;
-
     @Column(name = "is_active", nullable = false)
     private Boolean isActive = true;
 

@@ -4,8 +4,8 @@ const AuthContext = createContext(null);
 
 export function AuthProvider({ children }) {
   const [token, setToken] = useState(localStorage.getItem('token'));
-  const [role, setRole] = useState(localStorage.getItem('role'));
-  const [user, setUser] = useState(JSON.parse(localStorage.getItem('user') || 'null'));
+const [role, setRole] = useState('LEAD_PROCTOR');  
+const [user, setUser] = useState(JSON.parse(localStorage.getItem('user') || 'null'));
 
   const login = (data) => {
     setToken(data.token);

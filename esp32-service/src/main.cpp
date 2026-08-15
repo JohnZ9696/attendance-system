@@ -22,12 +22,12 @@ constexpr uint8_t BUTTON_PIN    = 32;  // INPUT_PULLUP: LOW = pressed
 // ============================================================================
 // Configuration
 // ============================================================================
-constexpr char kWiFiSsid[]     = "Public APCS 4.2";
-constexpr char kWiFiPassword[] = "PublicApcs";
+constexpr char kWiFiSsid[]     = "Minh Thu";
+constexpr char kWiFiPassword[] = "camsaike";
 constexpr char kDeviceId[]     = "door-01";
 
 constexpr char kServerCandidates[][40] = {
-  "http://10.122.5.62:8080/api/v1",
+  "http://192.168.1.81:8080/api/v1",
 };
 constexpr int kServerCandidatesCount = sizeof(kServerCandidates) / sizeof(kServerCandidates[0]);
 
@@ -60,6 +60,7 @@ enum class FeedbackState : uint8_t {
   CLOUD_WRITE_FAILED,
   INCIDENT_RECORDED
 };
+void startFeedback(FeedbackState state);
 FeedbackState feedbackState = FeedbackState::IDLE;
 unsigned long stateStartMs = 0UL;
 

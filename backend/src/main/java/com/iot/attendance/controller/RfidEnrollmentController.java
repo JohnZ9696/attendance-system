@@ -2,14 +2,10 @@ package com.iot.attendance.controller;
 
 import com.iot.attendance.service.RfidEnrollmentService;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestParam;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 
 @RestController
-@RequestMapping("/api/rfid-enrollment")
+@RequestMapping("/api/v1/rfid-enrollment")
 public class RfidEnrollmentController {
     private final RfidEnrollmentService enrollmentService;
 
@@ -33,10 +29,12 @@ public class RfidEnrollmentController {
     }
 
     @PostMapping("/scan")
-    public ResponseEntity<RfidEnrollmentService.EnrollmentState> submitScan(@RequestParam String uid) {
-        if (uid.isBlank()) {
+    public ResponseEntity<RfidEnrollmentService.EnrollmentState> submitScan(@RequestBody ScanRequest request) {
+        if (request.uid() == null || request.uid().isBlank()) {
             return ResponseEntity.badRequest().build();
         }
-        return ResponseEntity.ok(enrollmentService.submit(uid));
+        return ResponseEntity.ok(enrollmentService.submit(request.uid()));
     }
+
+    public record ScanRequest(String uid) {}
 }

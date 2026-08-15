@@ -6,6 +6,8 @@ import com.iot.attendance.entity.VerificationLog;
 import com.iot.attendance.repository.AttendanceLogRepository;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.time.LocalTime;
@@ -23,17 +25,18 @@ public class AttendanceService {
         this.attendanceLogRepository = attendanceLogRepository;
     }
 
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public AttendanceLog recordAttendance(Student student, VerificationLog verificationLog) {
         ZoneId zoneId = ZoneId.of("Asia/Ho_Chi_Minh");
         ZonedDateTime now = ZonedDateTime.now(zoneId);
         LocalDate date = now.toLocalDate();
         LocalTime time = now.toLocalTime();
-        
+
         LocalTime cutoff = LocalTime.of(7, 30, 0);
-        
+
         String status = "ON_TIME";
         Integer lateMinutes = 0;
-        
+
         if (time.isAfter(cutoff)) {
             status = "LATE";
             lateMinutes = (int) Math.ceil(ChronoUnit.SECONDS.between(cutoff, time) / 60.0);

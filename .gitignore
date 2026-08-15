@@ -34,6 +34,7 @@ ai-service/.mypy_cache/
 
 # ESP32 service (PlatformIO)
 esp32-service/.pio/
+esp32-camera/secrets.h
 
 # Credentials / keys
 *.pem

@@ -171,22 +171,38 @@ export default function Users() {
   };
   
   const handleFaceUpload = async (event) => {
-     if (!selectedUser || !isLeadProctor) return;
-     const file = event.target.files[0];
-     if (!file) return;
-     
-     setFaceUploading(true);
-     try {
-        const updatedUser = await apiClient.uploadFace(selectedUser.id, file);
-        setUsers(users.map(u => u.id === selectedUser.id ? updatedUser : u));
-        setSelectedUser(updatedUser);
-        toast('Đã đăng ký khuôn mặt thành công', 'success');
-     } catch (err) {
-        toast('Lỗi khi đăng ký khuôn mặt', 'error');
-     } finally {
-        setFaceUploading(false);
-        if (fileInputRef.current) fileInputRef.current.value = '';
-     }
+    if (!selectedUser || !isLeadProctor) return;
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    if (!['image/jpeg', 'image/png'].includes(file.type)) {
+      toast('Chỉ chấp nhận ảnh JPEG hoặc PNG.', 'error');
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      toast('Ảnh không được lớn hơn 5 MB.', 'error');
+      return;
+    }
+
+    setFaceUploading(true);
+    try {
+      const result = await apiClient.uploadFace(selectedUser.id, file);
+      const updated = {
+        ...selectedUser,
+        faceRegistered: result.faceRegistered,
+      };
+
+      setUsers((current) => current.map((user) =>
+        user.id === selectedUser.id ? updated : user
+      ));
+      setSelectedUser(updated);
+      toast('Đã tạo và lưu embedding khuôn mặt.', 'success');
+    } catch (error) {
+      toast(error.message || 'Không thể đăng ký khuôn mặt.', 'error');
+    } finally {
+      setFaceUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
   };
 
   const search = keyword.trim().toLowerCase();
@@ -282,10 +298,10 @@ export default function Users() {
             </div>
             
             <div className="mb-4 flex gap-4 items-center">
-               <div className="p-3 rounded-md flex-1" style={{ border: '1px solid var(--border-color)', background: 'var(--bg-surface)' }}>
-                  <p className="text-sm text-muted mb-2">Trạng thái khuôn mặt</p>
-                  <div className="flex justify-between items-center">
-                     {selectedUser.faceEmbedding ? <span className="badge badge-success"><Camera size={13} /> Đã đăng ký</span> : <span className="badge badge-neutral">Chưa đăng ký</span>}
+<div className="p-3 rounded-md flex-1" style={{ border: '1px solid var(--border-color)', background: 'var(--bg-surface)' }}>
+                   <p className="text-sm text-muted mb-2">Trạng thái khuôn mặt</p>
+                   <div className="flex justify-between items-center">
+                      {selectedUser.faceRegistered ? <span className="badge badge-success"><Camera size={13} /> Đã đăng ký</span> : <span className="badge badge-neutral">Chưa đăng ký</span>}
                      {isLeadProctor && (
                         <div>
                            <input type="file" accept="image/*" ref={fileInputRef} onChange={handleFaceUpload} style={{ display: 'none' }} />
@@ -363,7 +379,7 @@ export default function Users() {
                   <td><div className="person-cell"><span className="initials">{user.name?.slice(0, 1) || '?'}</span><strong>{user.name}</strong></div></td>
                   <td className="cell-code">{user.mssv}</td>
                   <td>{user.rfidUid ? <span className="badge badge-info"><Fingerprint size={13} /> {user.rfidUid}</span> : <span className="text-muted">Chưa đăng ký</span>}</td>
-                  <td>{user.faceEmbedding ? <span className="badge badge-success"><Camera size={13} /> Đã có</span> : <span className="badge badge-neutral">Chưa có</span>}</td>
+                  <td>{user.faceRegistered ? <span className="badge badge-success"><Camera size={13} /> Đã có</span> : <span className="badge badge-neutral">Chưa có</span>}</td>
                   <td>{user.is_active === false ? <span className="badge badge-warning">Khóa</span> : <span className="badge badge-success">Hoạt động</span>}</td>
                   {isLeadProctor && (
                     <td><div className="row-actions"><button className="icon-btn" onClick={(event) => { event.stopPropagation(); openEdit(user); }} title="Chỉnh sửa"><Edit2 size={17} /></button><button className="icon-btn danger" onClick={(event) => { event.stopPropagation(); handleDelete(user); }} title="Xóa"><Trash2 size={17} /></button></div></td>

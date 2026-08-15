@@ -2,18 +2,16 @@
 #include <WiFi.h>
 #include <esp_camera.h>
 #include <HTTPClient.h>
+#include "secrets.h"
 
 // ============================================================================
 // Configuration
 // ============================================================================
-const char* WIFI_SSID = "Public APCS 4.2";
-const char* WIFI_PASSWORD = "PublicApcs";
-
-const char* API_URL = "http://10.122.5.62:8000/internal/v1/cameras/";
+const char* API_URL = "http://192.168.1.10:8000/internal/v1/cameras/";
 const char* CAMERA_ID = "cam-01";
 
 constexpr int FLASH_LED_PIN = 4;
-constexpr unsigned long FRAME_INTERVAL_MS = 500;
+constexpr unsigned long FRAME_INTERVAL_MS = 250;
 constexpr unsigned long BLINK_INTERVAL_MS = 250;
 
 // ============================================================================
@@ -48,11 +46,11 @@ bool ledState = false;
 // ============================================================================
 void connectWiFi() {
   if (WiFi.status() == WL_CONNECTED) return;
-  
+
   WiFi.mode(WIFI_STA);
   WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
   Serial.print("Connecting to WiFi");
-  
+
   while (WiFi.status() != WL_CONNECTED) {
     if (millis() - lastBlinkMs > BLINK_INTERVAL_MS) {
       lastBlinkMs = millis();
@@ -63,14 +61,14 @@ void connectWiFi() {
     Serial.print(".");
   }
   Serial.println("\nWiFi connected");
-  digitalWrite(FLASH_LED_PIN, HIGH); // Steady when connected
+  digitalWrite(FLASH_LED_PIN, LOW); // Off when connected
 }
 
 // ============================================================================
 // Camera Initialization
 // ============================================================================
 bool initCamera() {
-  camera_config_t config;
+  camera_config_t config = {};
   config.ledc_channel = LEDC_CHANNEL_0;
   config.ledc_timer = LEDC_TIMER_0;
   config.pin_d0 = Y2_GPIO_NUM;
@@ -91,11 +89,13 @@ bool initCamera() {
   config.pin_reset = RESET_GPIO_NUM;
   config.xclk_freq_hz = 20000000;
   config.pixel_format = PIXFORMAT_JPEG;
-  
+
   // FRAMESIZE_VGA, JPEG quality 12, 1 frame buffer
   config.frame_size = FRAMESIZE_VGA;
   config.jpeg_quality = 12;
   config.fb_count = 1;
+  config.grab_mode = CAMERA_GRAB_WHEN_EMPTY;
+  config.fb_location = CAMERA_FB_IN_PSRAM;
 
   esp_err_t err = esp_camera_init(&config);
   if (err != ESP_OK) {
@@ -110,9 +110,6 @@ bool initCamera() {
 // ISO-8601 Timestamp Approximation
 // ============================================================================
 String getIsoTimestamp() {
-  // Normally sync with NTP. Here returning empty to let server set it, 
-  // or a placeholder if required. For multipart it's a form field.
-  // We'll sync time so we can provide a valid timestamp.
   time_t now;
   struct tm timeinfo;
   if (!getLocalTime(&timeinfo)) {
@@ -124,75 +121,8 @@ String getIsoTimestamp() {
 }
 
 // ============================================================================
-// Capture and Send Frame
+// Send Frame
 // ============================================================================
-void captureAndSend() {
-  if (millis() - lastFrameMs < FRAME_INTERVAL_MS) {
-    return;
-  }
-  lastFrameMs = millis();
-
-  if (WiFi.status() != WL_CONNECTED) {
-    Serial.println("WiFi not connected, skipping frame");
-    return;
-  }
-
-  camera_fb_t* fb = esp_camera_fb_get();
-  if (!fb) {
-    Serial.println("Camera capture failed");
-    return;
-  }
-
-  HTTPClient http;
-  String url = String(API_URL) + String(CAMERA_ID) + "/frames";
-  http.begin(url);
-
-  String boundary = "----ESP32CamBoundary";
-  http.addHeader("Content-Type", "multipart/form-data; boundary=" + boundary);
-
-  String timestamp = getIsoTimestamp();
-
-  String head = "--" + boundary + "\r\n";
-  head += "Content-Disposition: form-data; name=\"cameraId\"\r\n\r\n";
-  head += String(CAMERA_ID) + "\r\n";
-  
-  if (timestamp.length() > 0) {
-    head += "--" + boundary + "\r\n";
-    head += "Content-Disposition: form-data; name=\"timestamp\"\r\n\r\n";
-    head += timestamp + "\r\n";
-  }
-
-  head += "--" + boundary + "\r\n";
-  head += "Content-Disposition: form-data; name=\"frame\"; filename=\"frame.jpg\"\r\n";
-  head += "Content-Type: image/jpeg\r\n\r\n";
-
-  String tail = "\r\n--" + boundary + "--\r\n";
-
-  uint32_t totalLen = head.length() + fb->len + tail.length();
-
-  WiFiClient *stream = http.getStreamPtr();
-  http.sendRequest("POST", stream, totalLen);
-
-  stream->print(head);
-  stream->write(fb->buf, fb->len);
-  stream->print(tail);
-
-  int httpCode = http.GET(); // This gets the response code for the request sent
-  // Note: For POST with stream, sendRequest already sets it up, but HTTPClient needs to get the response.
-  // Actually, wait, HTTPClient doesn't have a simple way to stream upload with `POST` returning code directly in standard usage unless we do it correctly. 
-  // Wait, correct usage of HTTPClient stream: 
-  // http.sendRequest("POST", stream, totalLen) will not work if stream is null. stream ptr is for receiving.
-  // For sending, we can allocate a buffer or send piece by piece.
-  // Let's just use `http.sendRequest("POST", (uint8_t *)payload, payload_len)` or custom WiFiClient.
-
-  // Let's rewrite the POST using a custom buffer or String if it's small, or use raw WiFiClient.
-  // A VGA JPEG is ~10-20KB, which fits in ESP32 RAM. Let's just build a single buffer to be safe, 
-  // but wait, standard way is to use WiFiClient directly to avoid huge String allocations.
-  
-  http.end();
-  esp_camera_fb_return(fb);
-}
-
 void sendFrameRaw() {
   if (millis() - lastFrameMs < FRAME_INTERVAL_MS) {
     return;
@@ -213,14 +143,16 @@ void sendFrameRaw() {
   HTTPClient http;
   String url = String(API_URL) + CAMERA_ID + "/frames";
   http.begin(url);
-  
+
+  http.addHeader("INTERNAL-API-KEY", INTERNAL_API_KEY);
+
   String boundary = "----ESP32CamBoundary";
   http.addHeader("Content-Type", "multipart/form-data; boundary=" + boundary);
-  
+
   String head = "--" + boundary + "\r\n";
   head += "Content-Disposition: form-data; name=\"cameraId\"\r\n\r\n";
   head += String(CAMERA_ID) + "\r\n";
-  
+
   String timestamp = getIsoTimestamp();
   if (timestamp.length() > 0) {
     head += "--" + boundary + "\r\n";
@@ -229,40 +161,36 @@ void sendFrameRaw() {
   }
 
   head += "--" + boundary + "\r\n";
-  head += "Content-Disposition: form-data; name=\"file\"; filename=\"frame.jpg\"\r\n";
+  head += "Content-Disposition: form-data; name=\"image\"; filename=\"frame.jpg\"\r\n";
   head += "Content-Type: image/jpeg\r\n\r\n";
-  
+
   String tail = "\r\n--" + boundary + "--\r\n";
 
   size_t totalLen = head.length() + fb->len + tail.length();
-  
-  // To avoid huge allocation, we can just use the underlying WiFiClient
-  // But wait, HTTPClient doesn't support streaming POST easily in all versions.
-  // Let's allocate a buffer if we have RAM. VGA JPEG is small (~15-30KB).
+
   uint8_t *post_data = (uint8_t *)malloc(totalLen);
   if (!post_data) {
-      Serial.println("Malloc failed");
-      esp_camera_fb_return(fb);
-      http.end();
-      return;
+    Serial.println("Malloc failed");
+    esp_camera_fb_return(fb);
+    http.end();
+    return;
   }
-  
+
   memcpy(post_data, head.c_str(), head.length());
   memcpy(post_data + head.length(), fb->buf, fb->len);
   memcpy(post_data + head.length() + fb->len, tail.c_str(), tail.length());
-  
+
   int code = http.POST(post_data, totalLen);
   if (code > 0) {
     Serial.printf("Frame sent, HTTP %d\n", code);
   } else {
     Serial.printf("Frame send failed: %s\n", http.errorToString(code).c_str());
   }
-  
+
   free(post_data);
   http.end();
   esp_camera_fb_return(fb);
 }
-
 
 void setup() {
   Serial.begin(115200);
@@ -288,7 +216,7 @@ void loop() {
     WiFi.reconnect();
     return;
   } else {
-    digitalWrite(FLASH_LED_PIN, HIGH);
+    digitalWrite(FLASH_LED_PIN, LOW);
   }
 
   sendFrameRaw();
