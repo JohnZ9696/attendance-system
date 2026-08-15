@@ -22,13 +22,13 @@ constexpr uint8_t BUTTON_PIN    = 32;  // INPUT_PULLUP: LOW = pressed
 // ============================================================================
 // Network configuration
 // ============================================================================
-constexpr char kWiFiSsid[]     = "ESP32TEST";
-constexpr char kWiFiPassword[] = "test12345";
+constexpr char kWiFiSsid[]     = "Public APCS 4.2";  // phone hotspot SSID
+constexpr char kWiFiPassword[] = "PublicApcs";
 
 // Backend candidates, tried in order. The PC's hotspot IP can change between
 // reconnects, so keep a small list and the firmware uses the first that answers.
 constexpr char kServerCandidates[][40] = {
-  "http://192.168.111.185:8080/api",  // PC on current hotspot
+  "http://10.122.5.62:8080/api",  // PC on current hotspot
 };
 constexpr int  kServerCandidatesCount = sizeof(kServerCandidates) / sizeof(kServerCandidates[0]);
 constexpr char kHelpMessage[]  = "Student needs help";
