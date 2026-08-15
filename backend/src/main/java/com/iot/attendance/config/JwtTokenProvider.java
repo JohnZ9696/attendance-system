@@ -1,5 +1,6 @@
 package com.iot.attendance.config;
 
+import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.SignatureAlgorithm;
 import io.jsonwebtoken.security.Keys;
@@ -42,5 +43,9 @@ public class JwtTokenProvider {
         } catch (Exception ex) {
             return false;
         }
+    }
+    
+    public Claims getClaims(String token) {
+        return Jwts.parserBuilder().setSigningKey(key).build().parseClaimsJws(token).getBody();
     }
 }

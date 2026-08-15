@@ -31,10 +31,6 @@ export default function Login() {
   return (
     <div className="login-container" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', background: 'var(--bg-base)' }}>
       <Panel className="login-panel" style={{ width: '100%', maxWidth: '400px', padding: '2rem' }}>
-        <div style={{ textAlign: 'center', marginBottom: '2rem' }}>
-          <h1 style={{ fontSize: '1.5rem', fontWeight: 600 }}>Đăng nhập hệ thống</h1>
-          <p className="text-muted" style={{ marginTop: '0.5rem' }}>Quản lý điểm danh thông minh</p>
-        </div>
         
         {error && <ErrorBanner message={error} />}
         

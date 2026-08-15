@@ -9,7 +9,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
-@RequestMapping("/api/rfid-enrollment")
+@RequestMapping("/api/v1/rfid-enrollment")
 public class RfidEnrollmentController {
     private final RfidEnrollmentService enrollmentService;
 
