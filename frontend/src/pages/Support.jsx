@@ -1,7 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Send, AlertTriangle, CheckCircle, Clock } from 'lucide-react';
 import { apiClient } from '../api/client';
-import { useAuth } from '../contexts/AuthContext';
 import { ErrorBanner } from '../components/ui';
 import { useToast } from '../components/useToast';
 
@@ -18,13 +17,12 @@ const statusLabels = {
 };
 
 export default function Support() {
-  const { role } = useAuth();
   const [incidents, setIncidents] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const toast = useToast();
 
-  const isLeadProctor = role === 'LEAD_PROCTOR';
+  const isLeadProctor = true;
 
   const loadIncidents = async () => {
     setLoading(true);

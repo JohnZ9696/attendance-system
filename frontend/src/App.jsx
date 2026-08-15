@@ -8,30 +8,22 @@ import History from './pages/History';
 import Reports from './pages/Reports';
 import Settings from './pages/Settings';
 import Support from './pages/Support';
-import Login from './pages/Login';
-import ProtectedRoute from './components/ProtectedRoute';
-import { AuthProvider } from './contexts/AuthContext';
 
 function App() {
   return (
-    <AuthProvider>
-      <BrowserRouter>
-        <Routes>
-          <Route path="/login" element={<Login />} />
-          <Route path="/" element={<ProtectedRoute />}>
-            <Route element={<DashboardLayout />}>
-              <Route index element={<Dashboard />} />
-              <Route path="users" element={<Users />} />
-              <Route path="monitoring" element={<Monitoring />} />
-              <Route path="history" element={<History />} />
-              <Route path="reports" element={<Reports />} />
-              <Route path="settings" element={<Settings />} />
-              <Route path="support" element={<Support />} />
-            </Route>
-          </Route>
-        </Routes>
-      </BrowserRouter>
-    </AuthProvider>
+    <BrowserRouter>
+      <Routes>
+        <Route element={<DashboardLayout />}>
+          <Route index element={<Dashboard />} />
+          <Route path="users" element={<Users />} />
+          <Route path="monitoring" element={<Monitoring />} />
+          <Route path="history" element={<History />} />
+          <Route path="reports" element={<Reports />} />
+          <Route path="settings" element={<Settings />} />
+          <Route path="support" element={<Support />} />
+        </Route>
+      </Routes>
+    </BrowserRouter>
   );
 }
 

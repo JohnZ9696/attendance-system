@@ -4,14 +4,12 @@ import { apiClient } from '../api/client';
 import { Button, ErrorBanner, PageHeader, Panel } from '../components/ui';
 import { SkeletonTable } from '../components/Skeleton';
 import { useToast } from '../components/useToast.js';
-import { useAuth } from '../contexts/AuthContext';
 
 const emptyForm = { name: '', mssv: '', rfidUid: '', is_active: true };
 const statusLabels = { ON_TIME: 'Đúng giờ', LATE: 'Đi muộn' };
 const statusBadge = { ON_TIME: 'badge-success', LATE: 'badge-warning' };
 
 export default function Users() {
-  const { role } = useAuth();
   const [users, setUsers] = useState([]);
   const [keyword, setKeyword] = useState('');
   const [form, setForm] = useState(emptyForm);
@@ -33,7 +31,7 @@ export default function Users() {
   const fileInputRef = useRef(null);
 
   const toast = useToast();
-  const isLeadProctor = role === 'LEAD_PROCTOR';
+  const isLeadProctor = true;
 
   const loadUsers = () => {
     setLoading(true);
