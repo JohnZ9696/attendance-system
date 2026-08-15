@@ -157,6 +157,25 @@ tbody tr:hover { background: #fafbfa; }
 .weekly-day-off-chip:hover { background: var(--bg-hover); }
 .weekly-day-off-chip.selected { background: #14745f; border-color: #14745f; color: #fff; }
 
+.toast-stack { position: fixed; right: 18px; bottom: 18px; z-index: 100; display: flex; flex-direction: column; gap: 10px; max-width: min(380px, calc(100vw - 36px)); }
+.toast { display: flex; align-items: center; gap: 10px; padding: 12px 14px; border-radius: 8px; background: #1f2825; color: #f2f6f4; box-shadow: 0 14px 40px rgba(18, 24, 21, 0.35); font-size: 0.875rem; animation: toast-in 180ms ease; }
+.toast svg { flex: 0 0 auto; }
+.toast span { flex: 1; min-width: 0; }
+.toast-close { display: inline-grid; place-items: center; width: 22px; height: 22px; border: 0; border-radius: 5px; background: transparent; color: #aeb8b3; cursor: pointer; }
+.toast-close:hover { color: #fff; background: rgba(255, 255, 255, 0.12); }
+.toast-success svg { color: #57c69b; }
+.toast-error svg { color: #f0938a; }
+.toast-info svg { color: #8fc3e8; }
+@keyframes toast-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+
+.header-clock { font-size: 0.875rem; font-weight: 600; color: var(--text-secondary); font-variant-numeric: tabular-nums; }
+
+.quick-date-group { display: flex; gap: 6px; }
+.quick-date-chip { padding: 8px 12px; border: 1px solid var(--border-color); border-radius: var(--radius-md); background: #fff; color: var(--text-secondary); font-size: 0.8125rem; font-weight: 600; cursor: pointer; }
+.quick-date-chip:hover { background: var(--bg-hover); }
+.quick-date-chip.selected { background: #14745f; border-color: #14745f; color: #fff; }
+.load-more-wrap { display: flex; justify-content: center; margin-top: 16px; }
+
 @media (max-width: 1050px) {
   .stats-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .dashboard-grid { grid-template-columns: 1fr; }
@@ -178,3 +197,78 @@ tbody tr:hover { background: #fafbfa; }
   .form-actions .btn { flex: 1; }
   .error-banner { align-items: stretch; flex-direction: column; }
 }
+
+/* ── Skeleton ── */
+.skeleton { border-radius: 5px; background: linear-gradient(100deg, #e1e7e3 25%, #f0f4f2 40%, #e1e7e3 60%); background-size: 200% 100%; animation: skeleton-shimmer 1.5s ease-in-out infinite; }
+.skeleton-text { height: 14px; width: 100%; }
+.skeleton-circle { border-radius: 50%; }
+.skeleton-th { height: 14px; width: 100%; }
+.skeleton-td { height: 18px; width: 100%; }
+.skeleton-table { display: flex; flex-direction: column; gap: 12px; padding: 8px 0; }
+.skeleton-table-header, .skeleton-table-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; padding: 0 16px; }
+.skeleton-table-header { padding-bottom: 8px; border-bottom: 1px solid var(--border-color); }
+.skeleton-card { display: flex; align-items: center; gap: 14px; padding: 16px; border-radius: var(--radius-lg); border: 1px solid var(--border-color); background: var(--bg-surface); }
+.skeleton-card-icon { width: 40px; height: 40px; flex: 0 0 40px; }
+.skeleton-card-text { flex: 1; display: flex; flex-direction: column; gap: 8px; }
+.skeleton-card-label { width: 55%; height: 12px; }
+.skeleton-card-value { width: 30%; height: 18px; }
+.skeleton-chart { display: flex; align-items: flex-end; gap: 10px; height: 200px; padding: 20px 0 0; }
+.skeleton-chart-bar { flex: 1; border-radius: 5px 5px 0 0; background: linear-gradient(180deg, #e1e7e3 25%, #f0f4f2 40%, #e1e7e3 60%); background-size: 100% 200%; animation: skeleton-shimmer-vert 1.5s ease-in-out infinite; }
+@keyframes skeleton-shimmer { 0% { background-position: -200% 0; } 100% { background-position: 200% 0; } }
+@keyframes skeleton-shimmer-vert { 0% { background-position: 0 0; } 100% { background-position: 0 200%; } }
+
+/* ── Page & dialog transitions ── */
+.page-stack { animation: fade-up 260ms ease both; }
+@keyframes fade-up { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+
+/* ── Table row staggered animation ── */
+.table-container { transition: opacity 240ms ease; }
+.table-container.loading { opacity: 0.5; }
+.table-container tbody tr { animation: row-in 240ms ease both; }
+@keyframes row-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+.table-container.loading tbody tr { animation: row-out 160ms ease both; }
+@keyframes row-out { from { opacity: 1; transform: translateY(0); } to { opacity: 0; transform: translateY(-4px); } }
+
+/* ── Filter bar smooth transitions ── */
+.filter-bar { transition: opacity 160ms ease; }
+.filter-bar.loading { opacity: 0.5; pointer-events: none; }
+
+/* ── Skeleton to content fade ── */
+.skeleton-table { animation: skeleton-in 200ms ease both; }
+@keyframes skeleton-in { from { opacity: 0; } to { opacity: 1; } }
+.skeleton-table + .table-container { animation: content-in 220ms ease both; }
+@keyframes content-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+
+.enrollment-backdrop { animation: backdrop-in 160ms ease both; }
+@keyframes backdrop-in { from { opacity: 0; } to { opacity: 1; } }
+.enrollment-dialog { animation: dialog-in 200ms ease both; }
+@keyframes dialog-in { from { opacity: 0; transform: scale(0.96) translateY(8px); } to { opacity: 1; transform: scale(1) translateY(0); } }
+
+.sidebar { transition: transform 180ms ease, box-shadow 180ms ease; }
+.nav-link { transition: background 140ms ease, color 140ms ease; }
+.row-clickable { transition: background 100ms ease; cursor: pointer; }
+.row-clickable:hover { background: var(--bg-hover); }
+.row-actions { opacity: 0; transition: opacity 100ms ease; }
+tr:hover .row-actions { opacity: 1; }
+
+.stat-panel { transition: box-shadow 160ms ease, transform 160ms ease; }
+.stat-panel:hover { box-shadow: 0 4px 16px rgba(20, 30, 25, 0.1); transform: translateY(-1px); }
+
+.activity-row { transition: background 120ms ease; }
+.activity-row:hover { background: var(--bg-hover); }
+
+.help-alert-backdrop { animation: backdrop-in 180ms ease both; }
+.help-alert { animation: dialog-in 220ms ease both; }
+
+.toast { animation: toast-in 220ms ease both; }
+@keyframes toast-in { from { opacity: 0; transform: translateY(12px) scale(0.96); } to { opacity: 1; transform: translateY(0) scale(1); } }
+
+.badge { transition: background 140ms ease, color 140ms ease; }
+.btn { transition: background 120ms ease, box-shadow 120ms ease, transform 100ms ease; }
+.btn:active { transform: scale(0.97); }
+
+.chart-frame { transition: opacity 200ms ease; }
+.dashboard-grid { transition: opacity 200ms ease; }
+
+/* stat count-up (CSS alone can't count, but numbers animate well) */
+.stat-panel strong { transition: color 200ms ease; }
