@@ -119,6 +119,44 @@ tbody tr:hover { background: #fafbfa; }
 .icon-btn:hover { color: var(--text-primary); background: var(--bg-hover); }
 .icon-btn.danger:hover { color: var(--status-error); background: #faeaea; }
 
+.row-clickable { cursor: pointer; }
+.row-clickable:hover { background: var(--bg-hover); }
+
+.stat-chip-row { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 16px; }
+.stat-chip { flex: 1 1 140px; min-width: 120px; padding: 12px 14px; border: 1px solid var(--border-color); border-radius: var(--radius-md); background: var(--bg-subtle, #f8faf9); display: flex; flex-direction: column; gap: 2px; }
+.stat-chip strong { font-size: 1.25rem; color: var(--text-primary); }
+.stat-chip span { color: var(--text-muted); font-size: 0.8125rem; }
+
+.detail-columns { display: flex; gap: 20px; flex-wrap: wrap; align-items: flex-start; }
+.detail-col { flex: 1 1 320px; min-width: 0; }
+.detail-col h3 { font-size: 0.875rem; margin-bottom: 10px; color: var(--text-primary); }
+.detail-col .table-container { max-height: 360px; overflow-y: auto; }
+.absence-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.absence-list li { padding: 9px 12px; border: 1px solid var(--border-color); border-radius: var(--radius-md); background: #fdf3f3; color: #8c3434; font-size: 0.875rem; }
+
+.day-off-list { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
+.day-off-chip { display: inline-flex; align-items: center; gap: 6px; padding: 7px 10px; border: 1px solid var(--border-color); border-radius: var(--radius-md); background: var(--bg-subtle, #f8faf9); color: var(--text-secondary); font-size: 0.8125rem; }
+.day-off-remove { display: inline-grid; place-items: center; width: 20px; height: 20px; border: 0; border-radius: 4px; background: transparent; color: var(--text-muted); cursor: pointer; }
+.day-off-remove:hover { color: var(--status-error); background: #faeaea; }
+
+.day-off-calendar { max-width: 320px; border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 12px; margin-top: 12px; }
+.day-off-calendar-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+.day-off-calendar-header strong { text-transform: capitalize; font-size: 0.9rem; }
+.day-off-weekdays { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; margin-bottom: 4px; }
+.day-off-weekday { text-align: center; color: var(--text-muted); font-size: 0.75rem; font-weight: 600; }
+.day-off-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
+.day-off-day { width: 100%; aspect-ratio: 1; display: grid; place-items: center; border: 0; border-radius: 6px; background: transparent; color: var(--text-primary); font-size: 0.8125rem; cursor: pointer; }
+.day-off-day:hover { background: var(--bg-hover); }
+.day-off-day.today { box-shadow: inset 0 0 0 1px var(--border-color-strong, #c6cfcb); }
+.day-off-day.selected { background: #14745f; color: #fff; font-weight: 600; }
+.day-off-day.selected:hover { background: #11604f; }
+.day-off-blank { pointer-events: none; }
+
+.weekly-day-off-toggle { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 4px; }
+.weekly-day-off-chip { min-width: 42px; padding: 8px 10px; border: 1px solid var(--border-color); border-radius: var(--radius-md); background: #fff; color: var(--text-secondary); font-size: 0.8125rem; font-weight: 600; cursor: pointer; }
+.weekly-day-off-chip:hover { background: var(--bg-hover); }
+.weekly-day-off-chip.selected { background: #14745f; border-color: #14745f; color: #fff; }
+
 @media (max-width: 1050px) {
   .stats-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .dashboard-grid { grid-template-columns: 1fr; }

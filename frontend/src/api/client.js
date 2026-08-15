@@ -26,6 +26,7 @@ export const apiClient = {
   deleteUser: (id) => request(`/users/${id}`, { method: 'DELETE' }),
   getAttendanceRecords: () => request('/attendance'),
   getTodayAttendance: () => request('/attendance/today'),
+  getUserAttendance: (userId) => request(`/attendance/user/${userId}`),
   deleteAttendanceRecord: (id) => request(`/attendance/${id}`, { method: 'DELETE' }),
   getAssistanceRequests: () => request('/assistance'),
   startRfidEnrollment: () => request('/rfid-enrollment/start', { method: 'POST' }),
