@@ -11,6 +11,8 @@ import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
+import lombok.Getter;
+import lombok.Setter;
 
 import java.math.BigDecimal;
 import java.time.OffsetDateTime;
@@ -18,6 +20,8 @@ import java.util.UUID;
 
 @Entity
 @Table(name = "verification_logs")
+@Getter
+@Setter
 public class VerificationLog {
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
@@ -25,7 +29,7 @@ public class VerificationLog {
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "student_id")
-    private User student;
+    private Student student;
 
     @Column(name = "scanned_uid", nullable = false)
     private String scannedUid;
@@ -50,7 +54,7 @@ public class VerificationLog {
     private String modelVersion;
 
     @Column(name = "notification_sent", nullable = false)
-    private boolean notificationSent = false;
+    private Boolean notificationSent = false;
 
     @Column(name = "notification_error")
     private String notificationError;
@@ -60,31 +64,4 @@ public class VerificationLog {
 
     @Column(name = "completed_at")
     private OffsetDateTime completedAt;
-
-    public UUID getId() { return id; }
-    public void setId(UUID id) { this.id = id; }
-    public User getStudent() { return student; }
-    public void setStudent(User student) { this.student = student; }
-    public String getScannedUid() { return scannedUid; }
-    public void setScannedUid(String scannedUid) { this.scannedUid = scannedUid; }
-    public BigDecimal getSimilarityPercent() { return similarityPercent; }
-    public void setSimilarityPercent(BigDecimal similarityPercent) { this.similarityPercent = similarityPercent; }
-    public Boolean getLivenessPassed() { return livenessPassed; }
-    public void setLivenessPassed(Boolean livenessPassed) { this.livenessPassed = livenessPassed; }
-    public VerificationResult getResult() { return result; }
-    public void setResult(VerificationResult result) { this.result = result; }
-    public String getFailureReason() { return failureReason; }
-    public void setFailureReason(String failureReason) { this.failureReason = failureReason; }
-    public String getModelName() { return modelName; }
-    public void setModelName(String modelName) { this.modelName = modelName; }
-    public String getModelVersion() { return modelVersion; }
-    public void setModelVersion(String modelVersion) { this.modelVersion = modelVersion; }
-    public boolean isNotificationSent() { return notificationSent; }
-    public void setNotificationSent(boolean notificationSent) { this.notificationSent = notificationSent; }
-    public String getNotificationError() { return notificationError; }
-    public void setNotificationError(String notificationError) { this.notificationError = notificationError; }
-    public OffsetDateTime getStartedAt() { return startedAt; }
-    public void setStartedAt(OffsetDateTime startedAt) { this.startedAt = startedAt; }
-    public OffsetDateTime getCompletedAt() { return completedAt; }
-    public void setCompletedAt(OffsetDateTime completedAt) { this.completedAt = completedAt; }
 }

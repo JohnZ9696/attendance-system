@@ -3,6 +3,7 @@ import { CalendarOff, ChevronLeft, ChevronRight, Save, X } from 'lucide-react';
 import { apiClient } from '../api/client';
 import { Skeleton } from '../components/Skeleton';
 import { useToast } from '../components/useToast.js';
+import { useAuth } from '../contexts/AuthContext';
 
 const WEEKDAY_LABELS = ['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN'];
 const WEEKDAY_INDEX = [1, 2, 3, 4, 5, 6, 0];
@@ -10,8 +11,9 @@ const WEEKDAY_INDEX = [1, 2, 3, 4, 5, 6, 0];
 const dateKey = (date) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
 
 export default function Settings() {
-  const [startTime, setStartTime] = useState('07:30');
-  const [graceMinutes, setGraceMinutes] = useState(15);
+  const { role } = useAuth();
+  const [cutoffTime, setCutoffTime] = useState('07:30:00');
+  const [similarityThreshold, setSimilarityThreshold] = useState(60);
   const [dayOffs, setDayOffs] = useState([]);
   const [weeklyDayOffs, setWeeklyDayOffs] = useState([0, 6]);
   const [calendarMonth, setCalendarMonth] = useState(() => new Date(new Date().getFullYear(), new Date().getMonth(), 1));
@@ -20,15 +22,17 @@ export default function Settings() {
   const [message, setMessage] = useState('');
   const toast = useToast();
 
+  const isLeadProctor = role === 'LEAD_PROCTOR';
+
   const loadSettings = async () => {
     setLoading(true);
     setMessage('');
     try {
       const settings = await apiClient.getSettings();
-      setStartTime(settings.classStartTime?.slice(0, 5) || '07:30');
-      setGraceMinutes(settings.lateGraceMinutes ?? 15);
-      setDayOffs(Array.isArray(settings.dayOffs) ? settings.dayOffs.map((value) => value.slice(0, 10)) : []);
-      setWeeklyDayOffs(Array.isArray(settings.weeklyDayOffs) ? settings.weeklyDayOffs : [0, 6]);
+      setCutoffTime(settings.attendance_cutoff_time || '07:30:00');
+      setSimilarityThreshold(settings.face_similarity_threshold_percent ?? 60);
+      setDayOffs(Array.isArray(settings.day_offs) ? settings.day_offs : []);
+      setWeeklyDayOffs(Array.isArray(settings.weekly_day_offs) ? settings.weekly_day_offs : [0, 6]);
     } catch {
       setMessage('Không thể tải cài đặt. Kiểm tra kết nối backend.');
     } finally {
@@ -41,14 +45,15 @@ export default function Settings() {
   }, []);
 
   const handleSave = async () => {
+    if (!isLeadProctor) return;
     setSaving(true);
     setMessage('');
     try {
       await apiClient.updateSettings({
-        classStartTime: startTime,
-        lateGraceMinutes: Number(graceMinutes),
-        dayOffs,
-        weeklyDayOffs,
+        attendance_cutoff_time: cutoffTime,
+        face_similarity_threshold_percent: Number(similarityThreshold),
+        day_offs: dayOffs,
+        weekly_day_offs: weeklyDayOffs,
       });
       toast('Đã lưu cài đặt thành công.', 'success');
       setMessage('Đã lưu thay đổi.');
@@ -61,14 +66,19 @@ export default function Settings() {
   };
 
   const toggleDayOff = (value) => {
+    if (!isLeadProctor) return;
     setDayOffs((current) => (current.includes(value) ? current.filter((item) => item !== value) : [...current, value].sort()));
   };
 
   const toggleWeeklyDayOff = (dayIndex) => {
+    if (!isLeadProctor) return;
     setWeeklyDayOffs((current) => (current.includes(dayIndex) ? current.filter((item) => item !== dayIndex) : [...current, dayIndex].sort()));
   };
 
-  const removeDayOff = (value) => setDayOffs((current) => current.filter((item) => item !== value));
+  const removeDayOff = (value) => {
+    if (!isLeadProctor) return;
+    setDayOffs((current) => current.filter((item) => item !== value));
+  }
 
   const changeMonth = (delta) => {
     setCalendarMonth(new Date(calendarMonth.getFullYear(), calendarMonth.getMonth() + delta, 1));
@@ -80,23 +90,19 @@ export default function Settings() {
   const leadingBlanks = (new Date(calendarMonth.getFullYear(), calendarMonth.getMonth(), 1).getDay() + 6) % 7;
   const calendarCells = [...Array(leadingBlanks).fill(null), ...Array.from({ length: daysInMonth }, (_, index) => index + 1)];
 
-  const threshold = (() => {
-    const [h, m] = startTime.split(':').map(Number);
-    const total = h * 60 + m + Number(graceMinutes);
-    return `${String(Math.floor(total / 60) % 24).padStart(2, '0')}:${String(total % 60).padStart(2, '0')}`;
-  })();
-
   return (
     <div className="page-stack">
       <div className="flex items-center justify-between mb-2">
         <div>
           <h2>Cài đặt hệ thống</h2>
-          <p className="text-muted">Cấu hình thời gian, cảnh báo và tích hợp thông báo</p>
+          <p className="text-muted">Cấu hình thời gian và độ chính xác nhận diện</p>
         </div>
-        <button className="btn btn-primary" onClick={handleSave} disabled={saving || loading}>
-          <Save size={18} />
-          Lưu thay đổi
-        </button>
+        {isLeadProctor && (
+          <button className="btn btn-primary" onClick={handleSave} disabled={saving || loading}>
+            <Save size={18} />
+            Lưu thay đổi
+          </button>
+        )}
       </div>
       {message && <div className="text-sm" style={{ color: 'var(--status-success)' }}>{message}</div>}
       {loading ? (
@@ -108,32 +114,34 @@ export default function Settings() {
       <div className="grid-content">
         <div className="flex-col gap-6" style={{ gridColumn: 'span 2' }}>
 
-          {/* Time Settings */}
+          {/* Time & Similarity Settings */}
           <div className="card">
-            <h3 className="mb-4">Cài đặt thời gian điểm danh</h3>
+            <h3 className="mb-4">Cấu hình nhận diện & điểm danh</h3>
             <div className="grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem' }}>
               <div className="form-group flex-col gap-2">
-                <label className="text-sm text-muted">Giờ bắt đầu học (Vào lớp)</label>
+                <label className="text-sm text-muted">Giờ chốt điểm danh (Muộn)</label>
                 <input
                   type="time"
+                  step="1"
                   className="input"
-                  value={startTime}
-                  disabled={loading}
-                  onChange={(event) => setStartTime(event.target.value)}
+                  value={cutoffTime}
+                  disabled={loading || !isLeadProctor}
+                  onChange={(event) => setCutoffTime(event.target.value)}
                 />
+                <span className="text-sm text-muted">Sau thời gian này sẽ tính là đi muộn.</span>
               </div>
               <div className="form-group flex-col gap-2">
-                <label className="text-sm text-muted">Thời gian trễ cho phép (phút)</label>
+                <label className="text-sm text-muted">Độ tin cậy khuôn mặt tối thiểu (%)</label>
                 <input
                   type="number"
                   className="input"
                   min="0"
-                  max="180"
-                  value={graceMinutes}
-                  disabled={loading}
-                  onChange={(event) => setGraceMinutes(event.target.value)}
+                  max="100"
+                  value={similarityThreshold}
+                  disabled={loading || !isLeadProctor}
+                  onChange={(event) => setSimilarityThreshold(event.target.value)}
                 />
-                <span className="text-sm text-muted">Sau {threshold} sẽ tính là đi muộn.</span>
+                <span className="text-sm text-muted">Thấp hơn tỷ lệ này sẽ bị từ chối.</span>
               </div>
             </div>
           </div>
@@ -154,6 +162,7 @@ export default function Settings() {
                     className={`weekly-day-off-chip${selected ? ' selected' : ''}`}
                     onClick={() => toggleWeeklyDayOff(dayIndex)}
                     aria-pressed={selected}
+                    disabled={!isLeadProctor}
                   >
                     {WEEKDAY_LABELS[index]}
                   </button>
@@ -183,6 +192,7 @@ export default function Settings() {
                       key={value}
                       onClick={() => toggleDayOff(value)}
                       aria-pressed={selected}
+                      disabled={!isLeadProctor}
                       title={selected ? 'Bỏ ngày nghỉ' : 'Đánh dấu ngày nghỉ'}
                     >
                       {day}
@@ -200,41 +210,13 @@ export default function Settings() {
                     <span className="day-off-chip" key={value}>
                       <CalendarOff size={14} />
                       {new Date(`${value}T00:00:00`).toLocaleDateString('vi-VN', { weekday: 'short', day: '2-digit', month: '2-digit', year: 'numeric' })}
-                      <button type="button" className="day-off-remove" onClick={() => removeDayOff(value)} aria-label="Xóa ngày nghỉ"><X size={13} /></button>
+                      {isLeadProctor && <button type="button" className="day-off-remove" onClick={() => removeDayOff(value)} aria-label="Xóa ngày nghỉ"><X size={13} /></button>}
                     </span>
                   ))}
                 </div>
               </>
             ) : <p className="text-sm text-muted" style={{ marginTop: 14 }}>Chưa có ngày nghỉ nào.</p>}
           </div>
-
-          {/* Email / SMS Config */}
-          <div className="card">
-            <h3 className="mb-4">Cấu hình thông báo (Email / SMS)</h3>
-            <div className="grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem' }}>
-              <div className="form-group flex-col gap-2">
-                <label className="text-sm text-muted">SMTP Server (Email)</label>
-                <input type="text" className="input" defaultValue="smtp.gmail.com" />
-              </div>
-              <div className="form-group flex-col gap-2">
-                <label className="text-sm text-muted">Email gửi thông báo</label>
-                <input type="email" className="input" defaultValue="admin@school.edu.vn" />
-              </div>
-              <div className="form-group flex-col gap-2">
-                <label className="text-sm text-muted">SMS API Key (Twilio/VietGuys)</label>
-                <input type="password" className="input" defaultValue="********" />
-              </div>
-              <div className="form-group flex-col gap-2">
-                <label className="text-sm text-muted">Kích hoạt thông báo phụ huynh khi đi muộn</label>
-                <select className="input">
-                  <option value="yes">Có (Email & SMS)</option>
-                  <option value="email_only">Chỉ Email</option>
-                  <option value="no">Không</option>
-                </select>
-              </div>
-            </div>
-          </div>
-
         </div>
 
         {/* System Info */}

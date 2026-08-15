@@ -1,17 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
-import { NavLink, Outlet } from 'react-router-dom';
-import { Activity, LayoutDashboard, Users, Clock, BarChart3, Settings, Bell, User, Menu, X, ScanFace, CircleAlert } from 'lucide-react';
+import { NavLink, Outlet, useNavigate } from 'react-router-dom';
+import { Activity, LayoutDashboard, Users, Clock, BarChart3, Settings, Bell, User, Menu, X, ScanFace, CircleAlert, LogOut, LifeBuoy } from 'lucide-react';
 import { apiClient } from '../api/client';
+import { useAuth } from '../contexts/AuthContext';
 import './DashboardLayout.css';
-
-const navItems = [
-  { path: '/', label: 'Dashboard', icon: LayoutDashboard },
-  { path: '/users', label: 'Quản lý người dùng', icon: Users },
-  { path: '/history', label: 'Lịch sử điểm danh', icon: Clock },
-  { path: '/reports', label: 'Báo cáo & Thống kê', icon: BarChart3 },
-  { path: '/monitoring', label: 'Giám sát thiết bị', icon: Activity },
-  { path: '/settings', label: 'Cài đặt hệ thống', icon: Settings },
-];
 
 function LiveClock() {
   const [now, setNow] = useState(new Date());
@@ -24,46 +16,23 @@ function LiveClock() {
 
 export default function DashboardLayout() {
   const [menuOpen, setMenuOpen] = useState(false);
-  const [helpRequest, setHelpRequest] = useState(null);
-  const knownHelpIds = useRef(new Set());
-  const initializedHelpPolling = useRef(false);
+  const { user, role, logout } = useAuth();
+  const navigate = useNavigate();
 
-  useEffect(() => {
-    let cancelled = false;
-    let loading = false;
+  const handleLogout = () => {
+    logout();
+    navigate('/login');
+  };
 
-    const pollHelpRequests = async () => {
-      if (loading) return;
-      loading = true;
-      try {
-        const requests = await apiClient.getAssistanceRequests();
-        if (cancelled) return;
-
-        if (!initializedHelpPolling.current) {
-          requests.forEach((request) => knownHelpIds.current.add(request.id));
-          initializedHelpPolling.current = true;
-          return;
-        }
-
-        const newRequests = requests.filter((request) => !knownHelpIds.current.has(request.id));
-        requests.forEach((request) => knownHelpIds.current.add(request.id));
-        if (newRequests.length > 0) {
-          setHelpRequest(newRequests[newRequests.length - 1]);
-        }
-      } catch {
-        // Other API-backed pages already surface connectivity failures.
-      } finally {
-        loading = false;
-      }
-    };
-
-    pollHelpRequests();
-    const intervalId = window.setInterval(pollHelpRequests, 3000);
-    return () => {
-      cancelled = true;
-      window.clearInterval(intervalId);
-    };
-  }, []);
+  const navItems = [
+    { path: '/', label: 'Tổng quan', icon: LayoutDashboard },
+    role === 'LEAD_PROCTOR' && { path: '/users', label: 'Quản lý người dùng', icon: Users },
+    { path: '/history', label: 'Lịch sử điểm danh', icon: Clock },
+    { path: '/reports', label: 'Báo cáo & Thống kê', icon: BarChart3 },
+    { path: '/monitoring', label: 'Giám sát trực tiếp', icon: Activity },
+    role === 'LEAD_PROCTOR' && { path: '/settings', label: 'Cài đặt hệ thống', icon: Settings },
+    { path: '/support', label: 'Hỗ trợ sự cố', icon: LifeBuoy }
+  ].filter(Boolean);
 
   return (
     <div className="layout-container">
@@ -90,7 +59,9 @@ export default function DashboardLayout() {
             </NavLink>
           ))}
         </nav>
-        <div className="sidebar-footer"><span className="status-pulse" /> API workspace</div>
+        <div className="sidebar-footer">
+          <span className="status-pulse" /> Phiên bản API v1
+        </div>
       </aside>
 
       {/* Main Content Area */}
@@ -102,16 +73,16 @@ export default function DashboardLayout() {
           </div>
           <div className="header-actions flex items-center gap-4">
             <LiveClock />
-            <button className="icon-btn relative" aria-label="Thông báo hỗ trợ">
-              <Bell size={20} />
-              {helpRequest && <span className="notification-dot" />}
-            </button>
             <div className="user-profile flex items-center gap-2">
               <div className="avatar flex items-center justify-center">
                 <User size={18} />
               </div>
-              <span className="user-name">Admin</span>
+              <span className="user-name">{user?.username || 'Admin'}</span>
+              <span className="badge badge-info" style={{ marginLeft: '4px' }}>{role}</span>
             </div>
+            <button className="icon-btn text-muted" onClick={handleLogout} title="Đăng xuất" id="logout-btn">
+              <LogOut size={18} />
+            </button>
           </div>
         </header>
 
@@ -119,21 +90,6 @@ export default function DashboardLayout() {
           <Outlet />
         </main>
       </div>
-
-      {helpRequest && (
-        <div className="help-alert-backdrop" role="presentation">
-          <section className="help-alert" role="alertdialog" aria-modal="true" aria-labelledby="help-alert-title">
-            <div className="help-alert-icon"><CircleAlert size={26} /></div>
-            <div className="help-alert-content">
-              <span className="help-alert-kicker">Yêu cầu hỗ trợ mới</span>
-              <h2 id="help-alert-title">{helpRequest.user?.name || 'Người dùng tại thiết bị'}</h2>
-              <p>{helpRequest.message || 'Cần quản lý hỗ trợ tại máy điểm danh.'}</p>
-              {helpRequest.user?.mssv && <span className="help-alert-meta">MSSV {helpRequest.user.mssv}</span>}
-            </div>
-            <button className="help-alert-dismiss" autoFocus onClick={() => setHelpRequest(null)}>Đã nhận</button>
-          </section>
-        </div>
-      )}
     </div>
   );
 }

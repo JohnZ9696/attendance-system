@@ -20,29 +20,25 @@ constexpr uint8_t LED_RED_PIN   = 27;
 constexpr uint8_t BUTTON_PIN    = 32;  // INPUT_PULLUP: LOW = pressed
 
 // ============================================================================
-// Network configuration
+// Configuration
 // ============================================================================
-constexpr char kWiFiSsid[]     = "Public APCS 4.2";  // phone hotspot SSID
+constexpr char kWiFiSsid[]     = "Public APCS 4.2";
 constexpr char kWiFiPassword[] = "PublicApcs";
+constexpr char kDeviceId[]     = "door-01";
 
-// Backend candidates, tried in order. The PC's hotspot IP can change between
-// reconnects, so keep a small list and the firmware uses the first that answers.
 constexpr char kServerCandidates[][40] = {
-  "http://10.122.5.62:8080/api",  // PC on current hotspot
+  "http://10.122.5.62:8080/api/v1",
 };
-constexpr int  kServerCandidatesCount = sizeof(kServerCandidates) / sizeof(kServerCandidates[0]);
-constexpr char kHelpMessage[]  = "Student needs help";
+constexpr int kServerCandidatesCount = sizeof(kServerCandidates) / sizeof(kServerCandidates[0]);
 
 // ============================================================================
 // Timing / Behavior constants
 // ============================================================================
-constexpr unsigned long LED_FEEDBACK_MS    = 2000UL;  // LED stays on 2 s
-constexpr unsigned long BEEP_SHORT_MS      = 100UL;   // success beep length
-constexpr unsigned long BEEP_GAP_MS        = 100UL;   // gap between success beeps
-constexpr unsigned long BEEP_LONG_MS       = 1000UL;  // fail beep length
 constexpr unsigned long BUTTON_DEBOUNCE_MS = 50UL;    // software debounce window
+constexpr unsigned long BUTTON_COOLDOWN_MS = 2000UL;  // min gap between help button presses
 constexpr unsigned long CARD_COOLDOWN_MS   = 500UL;   // min gap between reads
 constexpr unsigned long ENROLLMENT_POLL_MS = 1000UL;  // backend command polling
+constexpr unsigned long HEARTBEAT_INTERVAL_MS = 60000UL; // Heartbeat interval
 constexpr int           WIFI_TIMEOUT_S     = 15;      // max WiFi connect wait
 
 // ============================================================================
@@ -50,16 +46,30 @@ constexpr int           WIFI_TIMEOUT_S     = 15;      // max WiFi connect wait
 // ============================================================================
 MFRC522 rfid(RFID_SS_PIN, RFID_RST_PIN);
 
-enum class FeedbackState : uint8_t { IDLE, SUCCESS, FAIL };
+enum class FeedbackState : uint8_t { 
+  IDLE, 
+  RFID_INVALID,
+  CAMERA_OFFLINE,
+  CAPTURE_TIMEOUT,
+  LIVENESS_FAILED,
+  FACE_BELOW_THRESHOLD,
+  FACE_MATCH_TIMEOUT,
+  ALREADY_CHECKED_IN,
+  CHECK_IN_ON_TIME,
+  CHECK_IN_LATE,
+  CLOUD_WRITE_FAILED,
+  INCIDENT_RECORDED
+};
 FeedbackState feedbackState = FeedbackState::IDLE;
 unsigned long stateStartMs = 0UL;
 
-// Button debounce state (pull-up => HIGH = released)
 bool lastStableButtonState = HIGH;
 bool lastButtonReading     = HIGH;
 unsigned long lastButtonChangeMs = 0UL;
+unsigned long lastButtonPressMs  = 0UL;
+unsigned long lastHeartbeatMs    = 0UL;
 
-String lastScannedUid;  // last card UID, reused for help requests
+String lastScannedUid;
 bool enrollmentMode = false;
 unsigned long lastEnrollmentPollMs = 0UL;
 
@@ -75,16 +85,14 @@ void allOff() {
 }
 
 // ----------------------------------------------------------------------------
-// WiFi
+// WiFi & NTP
 // ----------------------------------------------------------------------------
 bool connectToWifi() {
-  if (WiFi.status() == WL_CONNECTED) {
-    return true;
-  }
+  if (WiFi.status() == WL_CONNECTED) return true;
 
   WiFi.persistent(false);
   WiFi.mode(WIFI_STA);
-  WiFi.setSleep(false);  // phone hotspots often drop sleeping ESP32 stations
+  WiFi.setSleep(false);
   WiFi.setAutoReconnect(true);
   WiFi.begin(kWiFiSsid, kWiFiPassword);
 
@@ -101,19 +109,12 @@ bool connectToWifi() {
     Serial.println(WiFi.localIP());
     return true;
   }
-  Serial.printf("[WIFI] Connection failed, status=%d\n", WiFi.status());
   return false;
 }
 
-// ----------------------------------------------------------------------------
-// NTP time sync + ISO-8601 timestamp (UTC, "2026-08-13T03:29:25Z")
-// ----------------------------------------------------------------------------
 void syncTime() {
-  if (WiFi.status() != WL_CONNECTED) {
-    Serial.println("[NTP] Skipped: WiFi is offline");
-    return;
-  }
-  configTime(0, 0, "pool.ntp.org", "time.nist.gov");  // UTC
+  if (WiFi.status() != WL_CONNECTED) return;
+  configTime(0, 0, "pool.ntp.org", "time.nist.gov");
   Serial.print("[NTP] Syncing");
   int attempts = 0;
   while (time(nullptr) < 100000L && attempts < 20) {
@@ -136,156 +137,87 @@ String getIsoTimestamp() {
 // ----------------------------------------------------------------------------
 // HTTP helpers
 // ----------------------------------------------------------------------------
-String workingBase = "";  // cached base URL that responded successfully
+String workingBase = "";
 
-// Find the first backend candidate that responds. Tries mDNS hostname first,
-// then falls back to IPs, so it works no matter what IP the hotspot assigns.
 String getApiBase() {
-  if (workingBase.length() > 0) {
-    return workingBase;
-  }
-  if (!connectToWifi()) {
-    return "";
-  }
-  for (int i = 0; i < kServerCandidatesCount; i++) {
-    HTTPClient http;
-    http.begin(String(kServerCandidates[i]) + "/users");
-    http.setTimeout(2500);
-    const int code = http.GET();
-    http.end();
-    Serial.printf("[NET] Candidate %d -> HTTP %d\n", i, code);
-    if (code == HTTP_CODE_OK) {
-      workingBase = String(kServerCandidates[i]);
-      Serial.print("[NET] Backend found: ");
-      Serial.println(workingBase);
-      return workingBase;
-    }
-  }
-  return String(kServerCandidates[0]);  // last resort, try first anyway
-}
-
-String urlEncode(const String& value) {
-  String out = "";
-  const size_t len = value.length();
-  for (size_t i = 0; i < len; i++) {
-    const char c = value[i];
-    if (isalnum(c) || c == '-' || c == '_' || c == '.' || c == '~') {
-      out += c;
-    } else {
-      char buf[4];
-      snprintf(buf, sizeof buf, "%%%02X", (unsigned char)c);
-      out += buf;
-    }
-  }
-  return out;
-}
-
-String httpGet(const String& url) {
-  if (!connectToWifi()) {
-    return "";
-  }
-  HTTPClient http;
-  http.begin(url);
-  http.setTimeout(5000);
-  const int code = http.GET();
-  String body = "";
-  if (code == HTTP_CODE_OK) {
-    body = http.getString();
-  }
-  Serial.printf("[HTTP] GET %d\n", code);
-  http.end();
-  return body;
+  if (workingBase.length() > 0) return workingBase;
+  if (!connectToWifi()) return "";
+  
+  // In a real scenario, we might test candidates here.
+  // For simplicity, we just use the first.
+  workingBase = String(kServerCandidates[0]);
+  return workingBase;
 }
 
 // ----------------------------------------------------------------------------
 // API calls
 // ----------------------------------------------------------------------------
-String resolveUserIdByRfid(const String& uid) {
+
+void sendHeartbeat() {
+  if (millis() - lastHeartbeatMs < HEARTBEAT_INTERVAL_MS) return;
+  lastHeartbeatMs = millis();
+  
   const String apiBase = getApiBase();
-  if (apiBase.length() == 0) {
-    return "";
-  }
-  const String body = httpGet(apiBase + "/users/rfid/" + uid);
-  if (body.length() == 0) {
-    return "";
-  }
-  JsonDocument doc;
-  if (deserializeJson(doc, body)) {
-    return "";
-  }
-  return doc["id"].as<String>();
+  if (apiBase.length() == 0 || !connectToWifi()) return;
+
+  HTTPClient http;
+  String url = apiBase + "/devices/" + kDeviceId + "/heartbeat";
+  http.begin(url);
+  http.setTimeout(3000);
+  int code = http.POST("");
+  http.end();
 }
 
-bool sendAttendance(const String& uid) {
-  const String userId = resolveUserIdByRfid(uid);
-  if (userId.length() == 0) {
-    Serial.println("[API] Card not registered");
-    return false;
+void sendHelpRequest() {
+  const String apiBase = getApiBase();
+  if (apiBase.length() == 0 || !connectToWifi()) {
+    startFeedback(FeedbackState::CLOUD_WRITE_FAILED);
+    return;
   }
 
-  const String apiBase = getApiBase();
-  if (apiBase.length() == 0) {
-    return false;
-  }
-  const String url = apiBase + "/attendance?userId=" + userId +
-                     "&checkInTime=" + getIsoTimestamp() +
-                     "&status=IN&method=RFID";
   HTTPClient http;
-  if (!connectToWifi()) {
-    return false;
-  }
+  String url = apiBase + "/devices/" + kDeviceId + "/incidents";
   http.begin(url);
-  http.setTimeout(5000);
-  const int code = http.POST("");  // POST with query params
-  http.end();
-  return code == HTTP_CODE_OK;
-}
+  http.addHeader("Content-Type", "application/json");
 
-bool sendHelpRequest(const String& uid) {
-  const String userId = uid.length() > 0 ? resolveUserIdByRfid(uid) : "";
-  const String apiBase = getApiBase();
-  if (apiBase.length() == 0) {
-    return false;
-  }
-  String url = apiBase + "/assistance?message=" + urlEncode(kHelpMessage);
-  if (userId.length() > 0) {
-    url += "&userId=" + userId;
-  }
-  HTTPClient http;
-  if (!connectToWifi()) {
-    return false;
-  }
-  http.begin(url);
+  StaticJsonDocument<200> doc;
+  doc["deviceId"] = kDeviceId;
+  doc["type"] = "HARDWARE_HELP_REQUEST";
+  doc["source"] = "PUSH_BUTTON";
+  doc["occurredAt"] = getIsoTimestamp();
+
+  String payload;
+  serializeJson(doc, payload);
+
   http.setTimeout(5000);
-  const int code = http.POST("");  // POST with query params
+  int code = http.POST(payload);
   http.end();
-  return code == HTTP_CODE_OK;
+
+  if (code == 200 || code == 201) {
+    startFeedback(FeedbackState::INCIDENT_RECORDED);
+  } else {
+    startFeedback(FeedbackState::CLOUD_WRITE_FAILED);
+  }
 }
 
 void pollEnrollmentCommand() {
-  if (millis() - lastEnrollmentPollMs < ENROLLMENT_POLL_MS || WiFi.status() != WL_CONNECTED) {
-    return;
-  }
+  if (millis() - lastEnrollmentPollMs < ENROLLMENT_POLL_MS || WiFi.status() != WL_CONNECTED) return;
   lastEnrollmentPollMs = millis();
 
   const String apiBase = getApiBase();
-  if (apiBase.length() == 0) {
-    return;
-  }
+  if (apiBase.length() == 0) return;
 
   HTTPClient http;
   http.begin(apiBase + "/rfid-enrollment");
   http.setTimeout(2000);
-  const int code = http.GET();
+  int code = http.GET();
   if (code == HTTP_CODE_OK) {
-    JsonDocument doc;
+    StaticJsonDocument<200> doc;
     if (!deserializeJson(doc, http.getString())) {
-      const bool waiting = doc["status"].as<String>() == "WAITING";
+      bool waiting = doc["status"].as<String>() == "WAITING";
       if (waiting != enrollmentMode) {
         enrollmentMode = waiting;
-        Serial.println(enrollmentMode
-          ? "[ENROLLMENT] Ready - scan the new card"
-          : "[ENROLLMENT] Cancelled or completed");
+        Serial.println(enrollmentMode ? "[ENROLLMENT] Ready" : "[ENROLLMENT] Cancelled/completed");
       }
     }
   }
@@ -294,22 +226,74 @@ void pollEnrollmentCommand() {
 
 bool submitEnrollmentUid(const String& uid) {
   const String apiBase = getApiBase();
-  if (apiBase.length() == 0 || !connectToWifi()) {
-    return false;
-  }
+  if (apiBase.length() == 0 || !connectToWifi()) return false;
 
   HTTPClient http;
-  http.begin(apiBase + "/rfid-enrollment/scan?uid=" + urlEncode(uid));
+  http.begin(apiBase + "/rfid-enrollment/scan");
+  http.addHeader("Content-Type", "application/json");
+  
+  StaticJsonDocument<200> doc;
+  doc["uid"] = uid;
+  String payload;
+  serializeJson(doc, payload);
+
   http.setTimeout(5000);
-  const int code = http.POST("");
+  int code = http.POST(payload);
   http.end();
   return code == HTTP_CODE_OK;
 }
 
+void sendRfidScan(const String& uid) {
+  const String apiBase = getApiBase();
+  if (apiBase.length() == 0 || !connectToWifi()) {
+    startFeedback(FeedbackState::CLOUD_WRITE_FAILED);
+    return;
+  }
+
+  HTTPClient http;
+  String url = apiBase + "/devices/" + kDeviceId + "/rfid-scans";
+  http.begin(url);
+  http.addHeader("Content-Type", "application/json");
+
+  StaticJsonDocument<200> doc;
+  doc["uid"] = uid;
+  doc["deviceId"] = kDeviceId;
+  doc["scannedAt"] = getIsoTimestamp();
+
+  String payload;
+  serializeJson(doc, payload);
+
+  http.setTimeout(15000); // Allow time for face match
+  int code = http.POST(payload);
+  
+  if (code > 0) {
+    StaticJsonDocument<200> resp;
+    deserializeJson(resp, http.getString());
+    String errorCode = resp["errorCode"].as<String>();
+    
+    if (code == 200 || code == 201) {
+      String status = resp["status"].as<String>();
+      if (status == "ON_TIME") startFeedback(FeedbackState::CHECK_IN_ON_TIME);
+      else if (status == "LATE") startFeedback(FeedbackState::CHECK_IN_LATE);
+      else startFeedback(FeedbackState::CHECK_IN_ON_TIME);
+    } else {
+      if (errorCode == "RFID_INVALID") startFeedback(FeedbackState::RFID_INVALID);
+      else if (errorCode == "CAMERA_OFFLINE") startFeedback(FeedbackState::CAMERA_OFFLINE);
+      else if (errorCode == "CAPTURE_TIMEOUT") startFeedback(FeedbackState::CAPTURE_TIMEOUT);
+      else if (errorCode == "LIVENESS_FAILED") startFeedback(FeedbackState::LIVENESS_FAILED);
+      else if (errorCode == "FACE_BELOW_THRESHOLD") startFeedback(FeedbackState::FACE_BELOW_THRESHOLD);
+      else if (errorCode == "FACE_MATCH_TIMEOUT") startFeedback(FeedbackState::FACE_MATCH_TIMEOUT);
+      else if (errorCode == "ALREADY_CHECKED_IN") startFeedback(FeedbackState::ALREADY_CHECKED_IN);
+      else startFeedback(FeedbackState::CLOUD_WRITE_FAILED);
+    }
+  } else {
+    startFeedback(FeedbackState::CLOUD_WRITE_FAILED);
+  }
+  http.end();
+}
+
 // ----------------------------------------------------------------------------
-// Feedback state machine (non-blocking, driven from loop())
-//   SUCCESS -> Green LED 2 s + 2 quick beeps (100 ms each)
-//   FAIL    -> Red   LED 2 s + 1 long  beep (1 s)
+// Feedback state machine
 // ----------------------------------------------------------------------------
 void startFeedback(FeedbackState state) {
   feedbackState = state;
@@ -318,86 +302,93 @@ void startFeedback(FeedbackState state) {
 }
 
 void updateFeedback() {
-  if (feedbackState == FeedbackState::IDLE) {
-    return;
-  }
-
+  if (feedbackState == FeedbackState::IDLE) return;
   const unsigned long elapsed = millis() - stateStartMs;
 
+  bool r_led = false, g_led = false, buzz = false;
+  unsigned long duration = 2000UL; // default 2s
+
   switch (feedbackState) {
-    case FeedbackState::SUCCESS: {
-      digitalWrite(LED_GREEN_PIN, HIGH);
-      if (elapsed < BEEP_SHORT_MS) {
-        setBuzzer(true);                                // beep 1
-      } else if (elapsed < BEEP_SHORT_MS + BEEP_GAP_MS) {
-        setBuzzer(false);
-      } else if (elapsed < 2UL * BEEP_SHORT_MS + BEEP_GAP_MS) {
-        setBuzzer(true);                                // beep 2
-      } else {
-        setBuzzer(false);
-      }
-      if (elapsed >= LED_FEEDBACK_MS) {
-        allOff();
-        feedbackState = FeedbackState::IDLE;
-      }
+    case FeedbackState::RFID_INVALID:
+      // red LED + short beep (100ms)
+      r_led = true;
+      buzz = (elapsed < 100);
       break;
-    }
-
-    case FeedbackState::FAIL: {
-      digitalWrite(LED_RED_PIN, HIGH);
-      setBuzzer(elapsed < BEEP_LONG_MS);
-      if (elapsed >= LED_FEEDBACK_MS) {
-        allOff();
-        feedbackState = FeedbackState::IDLE;
-      }
+    case FeedbackState::CAMERA_OFFLINE:
+    case FeedbackState::CAPTURE_TIMEOUT:
+    case FeedbackState::LIVENESS_FAILED:
+    case FeedbackState::FACE_MATCH_TIMEOUT:
+      // red LED + 2 beeps (100ms on, 100ms off, 100ms on)
+      r_led = true;
+      buzz = (elapsed < 100) || (elapsed >= 200 && elapsed < 300);
       break;
-    }
-
+    case FeedbackState::FACE_BELOW_THRESHOLD:
+      // red LED + long beep (1000ms)
+      r_led = true;
+      buzz = (elapsed < 1000);
+      break;
+    case FeedbackState::ALREADY_CHECKED_IN:
+      // green blink / special pattern
+      g_led = (elapsed % 500) < 250;
+      duration = 2000UL;
+      break;
+    case FeedbackState::CHECK_IN_ON_TIME:
+      // green LED + short beep
+      g_led = true;
+      buzz = (elapsed < 100);
+      break;
+    case FeedbackState::CHECK_IN_LATE:
+      // green LED + 2 short beeps
+      g_led = true;
+      buzz = (elapsed < 100) || (elapsed >= 200 && elapsed < 300);
+      break;
+    case FeedbackState::CLOUD_WRITE_FAILED:
+      // red LED + error beep
+      r_led = true;
+      buzz = (elapsed < 500); // 500ms beep
+      break;
+    case FeedbackState::INCIDENT_RECORDED:
+      // confirm LED
+      g_led = true;
+      buzz = (elapsed < 100);
+      duration = 1000UL;
+      break;
     default:
       break;
+  }
+
+  digitalWrite(LED_RED_PIN, r_led ? HIGH : LOW);
+  digitalWrite(LED_GREEN_PIN, g_led ? HIGH : LOW);
+  setBuzzer(buzz);
+
+  if (elapsed >= duration) {
+    allOff();
+    feedbackState = FeedbackState::IDLE;
   }
 }
 
 // ----------------------------------------------------------------------------
-// RFID: read a card UID as an uppercase hex string, or "" if none present
+// RFID
 // ----------------------------------------------------------------------------
 String readCardUid() {
-  if (!rfid.PICC_IsNewCardPresent()) {
-    return "";
-  }
-  if (!rfid.PICC_ReadCardSerial()) {
-    return "";
-  }
-
+  if (!rfid.PICC_IsNewCardPresent() || !rfid.PICC_ReadCardSerial()) return "";
   String uid = "";
   for (byte i = 0; i < rfid.uid.size; i++) {
-    if (rfid.uid.uidByte[i] < 0x10) {
-      uid += "0";
-    }
+    if (rfid.uid.uidByte[i] < 0x10) uid += "0";
     uid += String(rfid.uid.uidByte[i], HEX);
   }
   uid.toUpperCase();
   return uid;
 }
 
-// ----------------------------------------------------------------------------
-// Handle a detected card: read UID, call API, trigger feedback
-// ----------------------------------------------------------------------------
 void handleRfidScan() {
-  if (feedbackState != FeedbackState::IDLE) {
-    return;  // ignore new scans while feedback is running
-  }
-
+  if (feedbackState != FeedbackState::IDLE) return;
   static unsigned long lastScanMs = 0UL;
-  if (millis() - lastScanMs < CARD_COOLDOWN_MS) {
-    return;
-  }
-  lastScanMs = millis();
+  if (millis() - lastScanMs < CARD_COOLDOWN_MS) return;
 
   const String uid = readCardUid();
-  if (uid.length() == 0) {
-    return;
-  }
+  if (uid.length() == 0) return;
+  lastScanMs = millis();
 
   rfid.PICC_HaltA();
   rfid.PCD_StopCrypto1();
@@ -409,55 +400,35 @@ void handleRfidScan() {
   if (enrollmentMode) {
     if (submitEnrollmentUid(uid)) {
       enrollmentMode = false;
-      Serial.println("[ENROLLMENT] UID sent to web form");
-      startFeedback(FeedbackState::SUCCESS);
+      startFeedback(FeedbackState::CHECK_IN_ON_TIME);
     } else {
-      Serial.println("[ENROLLMENT] Failed to send UID");
-      startFeedback(FeedbackState::FAIL);
+      startFeedback(FeedbackState::CLOUD_WRITE_FAILED);
     }
     return;
   }
 
-  if (sendAttendance(uid)) {
-    Serial.println("[SCAN] Registered card -> attendance recorded, Green LED + 2 beeps");
-    startFeedback(FeedbackState::SUCCESS);
-  } else {
-    Serial.println("[SCAN] Unregistered card -> no record, Red LED + long beep");
-    startFeedback(FeedbackState::FAIL);
-  }
+  sendRfidScan(uid);
 }
 
 // ----------------------------------------------------------------------------
-// Button with software debounce (INPUT_PULLUP: LOW = pressed)
+// Button
 // ----------------------------------------------------------------------------
-bool isButtonPressedDebounced() {
+void handleButton() {
   const bool reading = digitalRead(BUTTON_PIN);
-
   if (reading != lastButtonReading) {
     lastButtonChangeMs = millis();
   }
   lastButtonReading = reading;
 
-  if ((millis() - lastButtonChangeMs) > BUTTON_DEBOUNCE_MS &&
-      reading != lastStableButtonState) {
+  if ((millis() - lastButtonChangeMs) > BUTTON_DEBOUNCE_MS && reading != lastStableButtonState) {
     lastStableButtonState = reading;
-    return reading == LOW;  // true only on the press edge
-  }
-  return false;
-}
-
-void handleButton() {
-  if (!isButtonPressedDebounced()) {
-    return;
-  }
-
-  Serial.println("Button pressed -> Sending help request to manager");
-  if (sendHelpRequest(lastScannedUid)) {
-    Serial.println("[HELP] Sent successfully");
-    startFeedback(FeedbackState::SUCCESS);
-  } else {
-    Serial.println("[HELP] Failed to send");
-    startFeedback(FeedbackState::FAIL);
+    if (reading == LOW) { // Pressed
+      if (millis() - lastButtonPressMs >= BUTTON_COOLDOWN_MS) {
+        lastButtonPressMs = millis();
+        Serial.println("[BUTTON] Help requested");
+        sendHelpRequest();
+      }
+    }
   }
 }
 
@@ -472,7 +443,6 @@ void setup() {
   pinMode(LED_GREEN_PIN, OUTPUT);
   pinMode(LED_RED_PIN, OUTPUT);
   pinMode(BUTTON_PIN, INPUT_PULLUP);
-
   allOff();
 
   connectToWifi();
@@ -480,8 +450,7 @@ void setup() {
 
   SPI.begin(SPI_SCK_PIN, SPI_MISO_PIN, SPI_MOSI_PIN, RFID_SS_PIN);
   rfid.PCD_Init();
-
-  Serial.println("RFID Attendance System ready (no camera mode)");
+  Serial.println("RFID Attendance System ready");
 }
 
 void loop() {
@@ -489,4 +458,5 @@ void loop() {
   pollEnrollmentCommand();
   handleRfidScan();
   updateFeedback();
+  sendHeartbeat();
 }

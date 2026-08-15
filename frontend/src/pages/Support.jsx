@@ -1,78 +1,106 @@
-import React from 'react';
-import { Send, AlertTriangle } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
+import { Send, AlertTriangle, CheckCircle, Clock } from 'lucide-react';
+import { apiClient } from '../api/client';
+import { useAuth } from '../contexts/AuthContext';
+import { ErrorBanner } from '../components/ui';
+import { useToast } from '../components/useToast';
+
+const statusBadge = {
+  OPEN: 'badge-error',
+  ACKNOWLEDGED: 'badge-warning',
+  RESOLVED: 'badge-success'
+};
+
+const statusLabels = {
+  OPEN: 'Chờ xử lý',
+  ACKNOWLEDGED: 'Đã tiếp nhận',
+  RESOLVED: 'Đã giải quyết'
+};
 
 export default function Support() {
+  const { role } = useAuth();
+  const [incidents, setIncidents] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const toast = useToast();
+
+  const isLeadProctor = role === 'LEAD_PROCTOR';
+
+  const loadIncidents = async () => {
+    setLoading(true);
+    try {
+      const data = await apiClient.getAssistanceRequests();
+      setIncidents(data);
+      setError('');
+    } catch {
+      setError('Không thể tải lịch sử sự cố.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadIncidents();
+  }, []);
+
+  const updateStatus = async (id, newStatus) => {
+    if (!isLeadProctor) return;
+    try {
+      await apiClient.updateAssistanceStatus(id, newStatus);
+      toast('Đã cập nhật trạng thái sự cố', 'success');
+      loadIncidents();
+    } catch {
+      toast('Lỗi khi cập nhật trạng thái', 'error');
+    }
+  };
+
   return (
     <div className="flex-col gap-6">
       <div className="flex items-center justify-between mb-2">
         <div>
           <h2>Hỗ trợ / Báo lỗi</h2>
-          <p className="text-muted">Gửi yêu cầu hỗ trợ khi hệ thống hoặc thiết bị gặp sự cố</p>
+          <p className="text-muted">Quản lý các yêu cầu hỗ trợ và sự cố thiết bị</p>
         </div>
       </div>
 
+      <ErrorBanner message={error} onRetry={loadIncidents} />
+
       <div className="grid-content">
-        <div className="card col-span-2">
-          <h3 className="mb-4 flex items-center gap-2">
-            <AlertTriangle size={20} className="text-muted" />
-            Mô tả sự cố
-          </h3>
-          <form className="flex-col gap-4">
-            <div className="form-group flex-col gap-2">
-              <label className="text-sm text-muted">Loại sự cố</label>
-              <select className="input">
-                <option value="hardware">Phần cứng (Camera, ESP32, RFID, Loa/Đèn)</option>
-                <option value="software">Phần mềm (Lỗi Web, Không tải được dữ liệu)</option>
-                <option value="network">Mạng (Mất kết nối Wifi, Server lỗi)</option>
-                <option value="other">Khác</option>
-              </select>
+        <div className="card col-span-3">
+          <h3 className="mb-4">Danh sách sự cố / Yêu cầu hỗ trợ</h3>
+          {loading ? (
+            <p className="text-muted">Đang tải dữ liệu...</p>
+          ) : (
+            <div className="flex-col gap-4 text-sm">
+              {incidents.length === 0 ? (
+                <p className="text-muted">Không có sự cố nào.</p>
+              ) : incidents.map(incident => (
+                <div key={incident.id} className="p-4 rounded-md" style={{ border: '1px solid var(--border-color)', background: 'var(--bg-base)' }}>
+                  <div className="flex justify-between mb-3 items-center">
+                    <span className={`badge ${statusBadge[incident.status] || 'badge-neutral'}`}>
+                      {statusLabels[incident.status] || incident.status}
+                    </span>
+                    <span className="text-muted">{new Date(incident.createdAt).toLocaleString('vi-VN')}</span>
+                  </div>
+                  <p style={{ fontWeight: 500, fontSize: '15px' }}>{incident.message}</p>
+                  <p className="text-muted mt-2">Nguồn: {incident.source} {incident.userId ? `- Học sinh ID: ${incident.userId}` : ''}</p>
+                  
+                  {isLeadProctor && incident.status !== 'RESOLVED' && (
+                    <div className="flex gap-2 mt-4 pt-4" style={{ borderTop: '1px solid var(--border-color)' }}>
+                      {incident.status === 'OPEN' && (
+                        <button className="btn btn-sm" onClick={() => updateStatus(incident.id, 'ACKNOWLEDGED')}>
+                          <Clock size={14} /> Tiếp nhận
+                        </button>
+                      )}
+                      <button className="btn btn-sm btn-primary" onClick={() => updateStatus(incident.id, 'RESOLVED')}>
+                        <CheckCircle size={14} /> Đánh dấu đã giải quyết
+                      </button>
+                    </div>
+                  )}
+                </div>
+              ))}
             </div>
-            
-            <div className="form-group flex-col gap-2">
-              <label className="text-sm text-muted">Mô tả chi tiết</label>
-              <textarea 
-                className="input" 
-                rows="5" 
-                placeholder="Vui lòng mô tả rõ sự cố bạn đang gặp phải (ví dụ: Không đọc được thẻ RFID, Camera bị mờ...)"
-                style={{ resize: 'vertical' }}
-              ></textarea>
-            </div>
-
-            <div className="form-group flex-col gap-2">
-              <label className="text-sm text-muted">Thiết bị bị ảnh hưởng (nếu có)</label>
-              <input type="text" className="input" placeholder="Mã thiết bị hoặc vị trí (ví dụ: Cửa A)" />
-            </div>
-
-            <div className="flex justify-end mt-4">
-              <button type="button" className="btn btn-primary">
-                <Send size={18} />
-                Gửi báo cáo lỗi
-              </button>
-            </div>
-          </form>
-        </div>
-
-        <div className="card">
-          <h3 className="mb-4">Lịch sử báo cáo</h3>
-          <div className="flex-col gap-4 text-sm">
-            <div className="p-3 rounded-md" style={{ border: '1px solid var(--border-color)' }}>
-              <div className="flex justify-between mb-2">
-                <span className="badge badge-warning">Đang xử lý</span>
-                <span className="text-muted">11/08/2026</span>
-              </div>
-              <p style={{ fontWeight: 500 }}>Lỗi không nhận thẻ RFID</p>
-              <p className="text-muted mt-1">Cửa phòng thực hành C không phản hồi khi quẹt thẻ.</p>
-            </div>
-            
-            <div className="p-3 rounded-md" style={{ border: '1px solid var(--border-color)', opacity: 0.7 }}>
-              <div className="flex justify-between mb-2">
-                <span className="badge badge-success">Đã giải quyết</span>
-                <span className="text-muted">10/08/2026</span>
-              </div>
-              <p style={{ fontWeight: 500 }}>Mất kết nối ESP32-CAM</p>
-              <p className="text-muted mt-1">Camera bị ngắt kết nối liên tục.</p>
-            </div>
-          </div>
+          )}
         </div>
       </div>
     </div>

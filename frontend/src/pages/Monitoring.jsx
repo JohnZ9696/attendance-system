@@ -1,56 +1,84 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { Camera, Wifi, CheckCircle, AlertCircle } from 'lucide-react';
+import { useSSE } from '../hooks/useSSE';
 
 export default function Monitoring() {
+  const { events, connected } = useSSE('/monitor/events');
+
+  const logs = useMemo(() => {
+    return events.map((e, idx) => {
+      let color = 'var(--status-info)';
+      let label = 'INFO';
+      let message = '';
+
+      if (e.type === 'attendance_event') {
+        color = 'var(--status-success)';
+        label = 'SUCCESS';
+        message = `Điểm danh: ${e.data.studentName} (${e.data.studentId}) - ${e.data.status === 'LATE' ? `Muộn ${e.data.lateMinutes}p` : 'Đúng giờ'}`;
+      } else if (e.type === 'verification_update') {
+        color = e.data.result === 'SUCCESS' ? 'var(--status-success)' : 'var(--status-warning)';
+        label = e.data.result;
+        message = `Xác thực khuôn mặt: ${e.data.result} (${(e.data.similarityPercent || 0).toFixed(1)}%)`;
+      } else if (e.type === 'device_status') {
+        color = e.data.status === 'ONLINE' ? 'var(--status-success)' : 'var(--status-error)';
+        label = e.data.status;
+        message = `Thiết bị ${e.data.deviceId} - Trạng thái: ${e.data.status}`;
+      } else if (e.type === 'incident') {
+        color = 'var(--status-error)';
+        label = 'INCIDENT';
+        message = `Sự cố: ${e.data.message} (${e.data.source})`;
+      } else {
+        message = JSON.stringify(e.data);
+      }
+
+      return (
+        <p key={idx}>
+          <span style={{ color: 'var(--text-muted)' }}>[{e.timestamp.toLocaleTimeString('vi-VN')}]</span>{' '}
+          <span style={{ color }}>{label}:</span> {message}
+        </p>
+      );
+    });
+  }, [events]);
+
+  const deviceStatuses = useMemo(() => {
+    const devices = {
+      'ESP32_GATEWAY': { status: 'UNKNOWN', lastHeartbeat: null },
+      'ESP32_CAM': { status: 'UNKNOWN', lastHeartbeat: null }
+    };
+    events.filter(e => e.type === 'device_status').forEach(e => {
+      if (devices[e.data.deviceId]) {
+        devices[e.data.deviceId].status = e.data.status;
+        devices[e.data.deviceId].lastHeartbeat = e.data.lastHeartbeat;
+      }
+    });
+    return devices;
+  }, [events]);
+
   return (
     <div className="flex-col gap-6">
       <div className="flex items-center justify-between mb-2">
         <div>
           <h2>Giám sát trực tiếp</h2>
-          <p className="text-muted">Xem camera trực tiếp và trạng thái thiết bị ESP32</p>
+          <p className="text-muted">Xem luồng log trực tiếp và trạng thái thiết bị</p>
         </div>
       </div>
 
       <div className="grid-content">
-        {/* Camera Feed */}
-        <div className="card col-span-2">
+        {/* Verification / Log View */}
+        <div className="card col-span-2 flex-col">
           <div className="flex items-center justify-between mb-4">
             <h3 className="flex items-center gap-2">
               <Camera size={20} />
-              Luồng Camera (ESP32-CAM)
+              Luồng sự kiện (SSE)
             </h3>
-            <span className="badge badge-success flex items-center gap-2">
-              <span className="notification-dot" style={{ position: 'relative', top: 0, right: 0 }}></span>
-              Trực tiếp
+            <span className={`badge ${connected ? 'badge-success' : 'badge-warning'} flex items-center gap-2`}>
+              {connected && <span className="notification-dot" style={{ position: 'relative', top: 0, right: 0 }}></span>}
+              {connected ? 'Trực tiếp' : 'Đang kết nối...'}
             </span>
           </div>
-          <div 
-            className="flex items-center justify-center bg-black rounded-md overflow-hidden relative" 
-            style={{ height: '400px', border: '1px solid var(--border-color)' }}
-          >
-            {/* Placeholder for Camera Feed */}
-            <div className="flex-col items-center gap-4" style={{ color: 'var(--text-muted)' }}>
-              <Camera size={48} />
-              <p>Đang chờ kết nối từ ESP32-CAM...</p>
-            </div>
-            
-            {/* Face Detection Overlay Simulation */}
-            <div 
-              style={{
-                position: 'absolute',
-                top: '20%',
-                left: '30%',
-                width: '150px',
-                height: '150px',
-                border: '2px dashed var(--accent-primary)',
-                borderRadius: '8px',
-                display: 'none' // Set to block when simulating detection
-              }}
-            >
-              <span style={{ position: 'absolute', top: '-25px', left: 0, background: 'var(--accent-primary)', color: 'white', padding: '2px 8px', borderRadius: '4px', fontSize: '12px' }}>
-                Đang nhận diện...
-              </span>
-            </div>
+          
+          <div className="flex-col gap-2 p-3 rounded-md" style={{ background: 'var(--bg-base)', border: '1px solid var(--border-color)', height: '400px', overflowY: 'auto', fontFamily: 'monospace', fontSize: '13px', lineHeight: '1.5' }}>
+            {logs.length > 0 ? logs : <p style={{ color: 'var(--text-muted)' }}>Đang chờ sự kiện...</p>}
           </div>
         </div>
 
@@ -64,10 +92,13 @@ export default function Monitoring() {
                   <Wifi size={20} className="text-muted" />
                   <div>
                     <p style={{ fontWeight: 500 }}>ESP32 Gateway</p>
-                    <p className="text-sm text-muted">IP: 192.168.1.100</p>
+                    <p className="text-sm text-muted">Trạng thái: {deviceStatuses['ESP32_GATEWAY'].status}</p>
                   </div>
                 </div>
-                <CheckCircle size={20} style={{ color: 'var(--status-success)' }} />
+                {deviceStatuses['ESP32_GATEWAY'].status === 'ONLINE' ? 
+                  <CheckCircle size={20} style={{ color: 'var(--status-success)' }} /> :
+                  <AlertCircle size={20} style={{ color: 'var(--status-warning)' }} />
+                }
               </div>
 
               <div className="flex items-center justify-between p-3 rounded-md" style={{ background: 'var(--bg-base)', border: '1px solid var(--border-color)' }}>
@@ -75,33 +106,14 @@ export default function Monitoring() {
                   <Camera size={20} className="text-muted" />
                   <div>
                     <p style={{ fontWeight: 500 }}>ESP32-CAM</p>
-                    <p className="text-sm text-muted">IP: 192.168.1.101</p>
+                    <p className="text-sm text-muted">Trạng thái: {deviceStatuses['ESP32_CAM'].status}</p>
                   </div>
                 </div>
-                <CheckCircle size={20} style={{ color: 'var(--status-success)' }} />
+                {deviceStatuses['ESP32_CAM'].status === 'ONLINE' ? 
+                  <CheckCircle size={20} style={{ color: 'var(--status-success)' }} /> :
+                  <AlertCircle size={20} style={{ color: 'var(--status-warning)' }} />
+                }
               </div>
-
-              <div className="flex items-center justify-between p-3 rounded-md" style={{ background: 'rgba(239, 68, 68, 0.05)', border: '1px solid rgba(239, 68, 68, 0.2)' }}>
-                <div className="flex items-center gap-3">
-                  <AlertCircle size={20} className="text-muted" />
-                  <div>
-                    <p style={{ fontWeight: 500 }}>RFID Reader RC522</p>
-                    <p className="text-sm text-muted">Mất kết nối 2 phút trước</p>
-                  </div>
-                </div>
-                <AlertCircle size={20} style={{ color: 'var(--status-error)' }} />
-              </div>
-            </div>
-          </div>
-
-          <div className="card">
-            <h3 className="mb-4">Log thời gian thực</h3>
-            <div className="flex-col gap-2 p-3 rounded-md" style={{ background: 'var(--bg-base)', border: '1px solid var(--border-color)', height: '200px', overflowY: 'auto', fontFamily: 'monospace', fontSize: '12px' }}>
-              <p><span style={{ color: 'var(--text-muted)' }}>[08:24:10]</span> <span style={{ color: 'var(--status-info)' }}>INFO:</span> Web client connected via Supabase Realtime.</p>
-              <p><span style={{ color: 'var(--text-muted)' }}>[08:25:01]</span> <span style={{ color: 'var(--status-success)' }}>SUCCESS:</span> Face matched - User: 24127345 (98.5% confidence)</p>
-              <p><span style={{ color: 'var(--text-muted)' }}>[08:25:02]</span> <span style={{ color: 'var(--status-success)' }}>SUCCESS:</span> RFID scanned - UID: A1:B2:C3:D4</p>
-              <p><span style={{ color: 'var(--text-muted)' }}>[08:25:02]</span> <span style={{ color: 'var(--status-success)' }}>SUCCESS:</span> Attendance recorded for 24127345.</p>
-              <p><span style={{ color: 'var(--text-muted)' }}>[08:27:15]</span> <span style={{ color: 'var(--status-error)' }}>ERROR:</span> RFID Reader timeout.</p>
             </div>
           </div>
         </div>

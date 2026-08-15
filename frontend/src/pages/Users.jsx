@@ -1,15 +1,17 @@
-import { useEffect, useState } from 'react';
-import { Camera, Edit2, Fingerprint, Plus, ScanLine, Search, Trash2, X } from 'lucide-react';
+import { useEffect, useState, useRef } from 'react';
+import { Camera, Edit2, Fingerprint, Plus, ScanLine, Search, Trash2, X, Upload } from 'lucide-react';
 import { apiClient } from '../api/client';
 import { Button, ErrorBanner, PageHeader, Panel } from '../components/ui';
 import { SkeletonTable } from '../components/Skeleton';
 import { useToast } from '../components/useToast.js';
+import { useAuth } from '../contexts/AuthContext';
 
-const emptyForm = { name: '', mssv: '', rfidUid: '', faceEmbedding: '' };
-const statusLabels = { IN: 'Vào', OUT: 'Ra', LATE: 'Đi muộn' };
-const statusBadge = { IN: 'badge-success', OUT: 'badge-info', LATE: 'badge-warning' };
+const emptyForm = { name: '', mssv: '', rfidUid: '', is_active: true };
+const statusLabels = { ON_TIME: 'Đúng giờ', LATE: 'Đi muộn' };
+const statusBadge = { ON_TIME: 'badge-success', LATE: 'badge-warning' };
 
 export default function Users() {
+  const { role } = useAuth();
   const [users, setUsers] = useState([]);
   const [keyword, setKeyword] = useState('');
   const [form, setForm] = useState(emptyForm);
@@ -26,7 +28,12 @@ export default function Users() {
   const [absenceRange, setAbsenceRange] = useState('month');
   const [dayOffs, setDayOffs] = useState([]);
   const [weeklyDayOffs, setWeeklyDayOffs] = useState([0, 6]);
+  
+  const [faceUploading, setFaceUploading] = useState(false);
+  const fileInputRef = useRef(null);
+
   const toast = useToast();
+  const isLeadProctor = role === 'LEAD_PROCTOR';
 
   const loadUsers = () => {
     setLoading(true);
@@ -68,12 +75,12 @@ export default function Users() {
     let cancelled = false;
     setUserLogsLoading(true);
     setUserLogsError('');
-    Promise.all([apiClient.getUserAttendance(selectedUser.id), apiClient.getSettings()])
+    Promise.all([apiClient.getAttendance({ studentId: selectedUser.id }), apiClient.getSettings()])
       .then(([logs, settings]) => {
         if (cancelled) return;
         setUserLogs(logs);
-        setDayOffs(Array.isArray(settings.dayOffs) ? settings.dayOffs.map((value) => value.slice(0, 10)) : []);
-        setWeeklyDayOffs(Array.isArray(settings.weeklyDayOffs) ? settings.weeklyDayOffs : [0, 6]);
+        setDayOffs(Array.isArray(settings.day_offs) ? settings.day_offs : []);
+        setWeeklyDayOffs(Array.isArray(settings.weekly_day_offs) ? settings.weekly_day_offs : [0, 6]);
       })
       .catch(() => { if (!cancelled) setUserLogsError('Không thể tải lịch sử điểm danh.'); })
       .finally(() => { if (!cancelled) setUserLogsLoading(false); });
@@ -91,12 +98,14 @@ export default function Users() {
   };
 
   const openCreate = () => {
+    if (!isLeadProctor) return;
     setEditingId(null);
     setForm(emptyForm);
     setShowForm(true);
   };
 
   const startEnrollment = async () => {
+    if (!isLeadProctor) return;
     setError('');
     setEditingId(null);
     setForm(emptyForm);
@@ -114,13 +123,14 @@ export default function Users() {
     try {
       await apiClient.cancelRfidEnrollment();
     } catch {
-      // Closing the local dialog should not be blocked by a network failure.
+      // ignore
     }
   };
 
   const openEdit = (user) => {
+    if (!isLeadProctor) return;
     setEditingId(user.id);
-    setForm({ name: user.name || '', mssv: user.mssv || '', rfidUid: user.rfidUid || '', faceEmbedding: user.faceEmbedding || '' });
+    setForm({ name: user.name || '', mssv: user.mssv || '', rfidUid: user.rfidUid || '', is_active: user.is_active ?? true });
     setShowForm(true);
   };
 
@@ -148,6 +158,7 @@ export default function Users() {
   };
 
   const handleDelete = async (user) => {
+    if (!isLeadProctor) return;
     if (!window.confirm(`Xóa ${user.name}? Thao tác này không thể hoàn tác.`)) return;
     try {
       await apiClient.deleteUser(user.id);
@@ -155,8 +166,27 @@ export default function Users() {
       toast(`Đã xóa ${user.name}.`, 'success');
       if (selectedUser?.id === user.id) closeDetail();
     } catch {
-      setError('Không thể xóa người dùng này. Kiểm tra kết nối backend và thử lại.');
+      setError('Không thể xóa người dùng này.');
     }
+  };
+  
+  const handleFaceUpload = async (event) => {
+     if (!selectedUser || !isLeadProctor) return;
+     const file = event.target.files[0];
+     if (!file) return;
+     
+     setFaceUploading(true);
+     try {
+        const updatedUser = await apiClient.uploadFace(selectedUser.id, file);
+        setUsers(users.map(u => u.id === selectedUser.id ? updatedUser : u));
+        setSelectedUser(updatedUser);
+        toast('Đã đăng ký khuôn mặt thành công', 'success');
+     } catch (err) {
+        toast('Lỗi khi đăng ký khuôn mặt', 'error');
+     } finally {
+        setFaceUploading(false);
+        if (fileInputRef.current) fileInputRef.current.value = '';
+     }
   };
 
   const search = keyword.trim().toLowerCase();
@@ -169,6 +199,7 @@ export default function Users() {
   if (absenceRange === '7') rangeStart = new Date(today.getFullYear(), today.getMonth(), today.getDate() - 6);
   else if (absenceRange === '30') rangeStart = new Date(today.getFullYear(), today.getMonth(), today.getDate() - 29);
   else rangeStart = new Date(today.getFullYear(), today.getMonth(), 1);
+  
   if (selectedUser?.createdAt) {
     const created = new Date(selectedUser.createdAt);
     if (created > rangeStart) rangeStart = new Date(created.getFullYear(), created.getMonth(), created.getDate());
@@ -185,7 +216,18 @@ export default function Users() {
 
   return (
     <div className="page-stack">
-      <PageHeader title="Người dùng" description="Quản lý hồ sơ, mã RFID và trạng thái dữ liệu khuôn mặt" actions={<><Button onClick={startEnrollment}><ScanLine size={16} /> Đăng ký thẻ</Button><Button variant="primary" onClick={openCreate}><Plus size={16} /> Thêm người dùng</Button></>} />
+      <PageHeader 
+        title="Người dùng" 
+        description="Quản lý hồ sơ, mã RFID và trạng thái dữ liệu khuôn mặt" 
+        actions={
+          isLeadProctor && (
+            <>
+              <Button onClick={startEnrollment}><ScanLine size={16} /> Đăng ký thẻ</Button>
+              <Button variant="primary" onClick={openCreate}><Plus size={16} /> Thêm người dùng</Button>
+            </>
+          )
+        } 
+      />
       <ErrorBanner message={error} onRetry={loadUsers} />
 
       {enrollment && (
@@ -216,7 +258,13 @@ export default function Users() {
             <label><span>Họ và tên *</span><input className="input" required value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} /></label>
             <label><span>MSSV *</span><input className="input" required value={form.mssv} onChange={(event) => setForm({ ...form, mssv: event.target.value })} /></label>
             <label><span>Mã RFID *</span><input className="input" required value={form.rfidUid} onChange={(event) => setForm({ ...form, rfidUid: event.target.value })} /></label>
-            <label className="form-wide"><span>Tham chiếu dữ liệu khuôn mặt</span><input className="input" value={form.faceEmbedding} onChange={(event) => setForm({ ...form, faceEmbedding: event.target.value })} placeholder="Để trống nếu chưa đăng ký" /></label>
+            <label>
+               <span>Hoạt động</span>
+               <select className="input" value={form.is_active} onChange={(e) => setForm({...form, is_active: e.target.value === 'true'})}>
+                  <option value="true">Có</option>
+                  <option value="false">Không</option>
+               </select>
+            </label>
             <div className="form-actions form-wide"><Button type="button" onClick={closeForm}>Hủy</Button><Button variant="primary" type="submit" disabled={saving}>{saving ? 'Đang lưu...' : editingId ? 'Lưu thay đổi' : 'Tạo người dùng'}</Button></div>
           </form>
         </Panel>
@@ -228,9 +276,27 @@ export default function Users() {
             <div className="panel-heading">
               <div>
                 <h2 id="detail-title">{selectedUser.name}</h2>
-                <p>MSSV {selectedUser.mssv}{selectedUser.rfidUid ? ` · RFID ${selectedUser.rfidUid}` : ''}</p>
+                <p>MSSV {selectedUser.mssv}{selectedUser.rfidUid ? ` · RFID ${selectedUser.rfidUid}` : ''} {!selectedUser.is_active && <span className="badge badge-warning">Không hoạt động</span>}</p>
               </div>
               <button className="icon-btn" onClick={closeDetail} aria-label="Đóng"><X size={18} /></button>
+            </div>
+            
+            <div className="mb-4 flex gap-4 items-center">
+               <div className="p-3 rounded-md flex-1" style={{ border: '1px solid var(--border-color)', background: 'var(--bg-surface)' }}>
+                  <p className="text-sm text-muted mb-2">Trạng thái khuôn mặt</p>
+                  <div className="flex justify-between items-center">
+                     {selectedUser.faceEmbedding ? <span className="badge badge-success"><Camera size={13} /> Đã đăng ký</span> : <span className="badge badge-neutral">Chưa đăng ký</span>}
+                     {isLeadProctor && (
+                        <div>
+                           <input type="file" accept="image/*" ref={fileInputRef} onChange={handleFaceUpload} style={{ display: 'none' }} />
+                           <Button variant="secondary" onClick={() => fileInputRef.current?.click()} disabled={faceUploading}>
+                              <Upload size={14} style={{ marginRight: '4px' }} />
+                              {faceUploading ? 'Đang tải lên...' : 'Tải ảnh lên'}
+                           </Button>
+                        </div>
+                     )}
+                  </div>
+               </div>
             </div>
 
             {userLogsError && <div className="text-muted" style={{ color: 'var(--status-error)', marginBottom: 12 }}>{userLogsError}</div>}
@@ -255,13 +321,13 @@ export default function Users() {
                 <h3>Lịch sử điểm danh</h3>
                 <div className="table-container">
                   <table>
-                    <thead><tr><th>Thời gian</th><th>Trạng thái</th><th>Phương thức</th></tr></thead>
+                    <thead><tr><th>Thời gian</th><th>Trạng thái</th><th>Số phút muộn</th></tr></thead>
                     <tbody>
                       {sortedLogs.map((log) => (
                         <tr key={log.id}>
                           <td>{new Date(log.checkInTime).toLocaleString('vi-VN')}</td>
                           <td><span className={`badge ${statusBadge[log.status] || 'badge-success'}`}>{statusLabels[log.status] || log.status}</span></td>
-                          <td>{log.method || '-'}</td>
+                          <td>{log.lateMinutes || '-'}</td>
                         </tr>
                       ))}
                       {!userLogsLoading && !sortedLogs.length && <tr><td colSpan="3"><div className="empty-state">Chưa có lượt điểm danh.</div></td></tr>}
@@ -290,7 +356,7 @@ export default function Users() {
         </div>
         <div className={`table-container${loading ? ' loading' : ''}`}>
           <table>
-            <thead><tr><th>Người dùng</th><th>MSSV</th><th>RFID</th><th>Khuôn mặt</th><th></th></tr></thead>
+            <thead><tr><th>Người dùng</th><th>MSSV</th><th>RFID</th><th>Khuôn mặt</th><th>Trạng thái</th>{isLeadProctor && <th></th>}</tr></thead>
             <tbody>
               {filtered.map((user, index) => (
                 <tr key={user.id} className="row-clickable" style={{ animationDelay: `${index * 25}ms` }} onClick={() => openDetail(user)}>
@@ -298,11 +364,14 @@ export default function Users() {
                   <td className="cell-code">{user.mssv}</td>
                   <td>{user.rfidUid ? <span className="badge badge-info"><Fingerprint size={13} /> {user.rfidUid}</span> : <span className="text-muted">Chưa đăng ký</span>}</td>
                   <td>{user.faceEmbedding ? <span className="badge badge-success"><Camera size={13} /> Đã có</span> : <span className="badge badge-neutral">Chưa có</span>}</td>
-                  <td><div className="row-actions"><button className="icon-btn" onClick={(event) => { event.stopPropagation(); openEdit(user); }} title="Chỉnh sửa"><Edit2 size={17} /></button><button className="icon-btn danger" onClick={(event) => { event.stopPropagation(); handleDelete(user); }} title="Xóa"><Trash2 size={17} /></button></div></td>
+                  <td>{user.is_active === false ? <span className="badge badge-warning">Khóa</span> : <span className="badge badge-success">Hoạt động</span>}</td>
+                  {isLeadProctor && (
+                    <td><div className="row-actions"><button className="icon-btn" onClick={(event) => { event.stopPropagation(); openEdit(user); }} title="Chỉnh sửa"><Edit2 size={17} /></button><button className="icon-btn danger" onClick={(event) => { event.stopPropagation(); handleDelete(user); }} title="Xóa"><Trash2 size={17} /></button></div></td>
+                  )}
                 </tr>
               ))}
-              {!loading && !filtered.length && <tr><td colSpan="5"><div className="empty-state">Không tìm thấy người dùng.</div></td></tr>}
-              {loading && <tr><td colSpan="5"><div className="empty-state"><SkeletonTable rows={6} cols={5} /></div></td></tr>}
+              {!loading && !filtered.length && <tr><td colSpan={isLeadProctor ? 6 : 5}><div className="empty-state">Không tìm thấy người dùng.</div></td></tr>}
+              {loading && <tr><td colSpan={isLeadProctor ? 6 : 5}><div className="empty-state"><SkeletonTable rows={6} cols={isLeadProctor ? 6 : 5} /></div></td></tr>}
             </tbody>
           </table>
         </div>

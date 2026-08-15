@@ -1,57 +1,41 @@
 package com.iot.attendance.controller;
 
-import com.iot.attendance.entity.User;
-import com.iot.attendance.service.UserService;
-import org.springframework.beans.factory.annotation.Autowired;
+import com.iot.attendance.repository.StudentRepository;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
-import java.util.List;
-import java.util.UUID;
-
 @RestController
-@RequestMapping("/api/users")
+@RequestMapping("/api/v1/users")
 public class UserController {
 
-    @Autowired
-    private UserService userService;
+    private final StudentRepository repository;
+
+    public UserController(StudentRepository repository) {
+        this.repository = repository;
+    }
 
     @GetMapping
-    public ResponseEntity<List<User>> getAllUsers() {
-        return ResponseEntity.ok(userService.getAllUsers());
-    }
-
-    @GetMapping("/{id}")
-    public ResponseEntity<User> getUserById(@PathVariable UUID id) {
-        return userService.getUserById(id)
-                .map(ResponseEntity::ok)
-                .orElse(ResponseEntity.notFound().build());
-    }
-
-    @GetMapping("/rfid/{rfidUid}")
-    public ResponseEntity<User> getUserByRfidUid(@PathVariable String rfidUid) {
-        return userService.getUserByRfidUid(rfidUid)
-                .map(ResponseEntity::ok)
-                .orElse(ResponseEntity.notFound().build());
+    public ResponseEntity<?> getAll() {
+        return ResponseEntity.ok(repository.findAll());
     }
 
     @PostMapping
-    public ResponseEntity<User> createUser(@RequestBody User user) {
-        return ResponseEntity.ok(userService.createUser(user));
+    public ResponseEntity<?> create() {
+        return ResponseEntity.ok().build();
     }
 
     @PutMapping("/{id}")
-    public ResponseEntity<User> updateUser(@PathVariable UUID id, @RequestBody User user) {
-        return userService.updateUser(id, user)
-                .map(ResponseEntity::ok)
-                .orElse(ResponseEntity.notFound().build());
+    public ResponseEntity<?> update() {
+        return ResponseEntity.ok().build();
     }
 
     @DeleteMapping("/{id}")
-    public ResponseEntity<Void> deleteUser(@PathVariable UUID id) {
-        if (!userService.deleteUser(id)) {
-            return ResponseEntity.notFound().build();
-        }
-        return ResponseEntity.noContent().build();
+    public ResponseEntity<?> delete() {
+        return ResponseEntity.ok().build();
+    }
+
+    @PostMapping("/{id}/face")
+    public ResponseEntity<?> updateFace() {
+        return ResponseEntity.ok().build();
     }
 }

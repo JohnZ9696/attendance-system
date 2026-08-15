@@ -10,6 +10,7 @@ import java.util.List;
 import java.util.UUID;
 
 @Repository
+@Deprecated
 public interface AttendanceRecordRepository extends JpaRepository<AttendanceRecord, UUID> {
     List<AttendanceRecord> findByUser(User user);
     List<AttendanceRecord> findByCheckInTimeBetween(OffsetDateTime start, OffsetDateTime end);

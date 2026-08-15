@@ -1,0 +1,117 @@
+openapi: 3.0.0
+info:
+  title: Spring Boot Main Backend API
+  version: 1.0.0
+paths:
+  /api/v1/auth/login:
+    post:
+      summary: Login for proctors
+      responses:
+        '200':
+          description: OK
+  /api/v1/devices/{deviceId}/rfid-scans:
+    post:
+      summary: Receive UID and start verification
+      parameters:
+        - name: deviceId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                uid:
+                  type: string
+                scannedAt:
+                  type: string
+                  format: date-time
+      responses:
+        '200':
+          description: OK
+  /api/v1/devices/{deviceId}/heartbeat:
+    post:
+      summary: Device heartbeat
+      parameters:
+        - name: deviceId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
+  /api/v1/devices/{deviceId}/incidents:
+    post:
+      summary: Push button incident report
+      parameters:
+        - name: deviceId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                type:
+                  type: string
+                source:
+                  type: string
+                occurredAt:
+                  type: string
+                  format: date-time
+      responses:
+        '200':
+          description: OK
+  /api/v1/attendance:
+    get:
+      summary: History, search, filter
+      responses:
+        '200':
+          description: OK
+  /api/v1/monitor/events:
+    get:
+      summary: SSE for check-in, device, and incident events
+      responses:
+        '200':
+          description: OK
+  /api/v1/users:
+    get:
+      summary: List users
+      responses:
+        '200':
+          description: OK
+    post:
+      summary: Create user
+      responses:
+        '200':
+          description: OK
+  /api/v1/settings:
+    get:
+      summary: Get system settings
+      responses:
+        '200':
+          description: OK
+    patch:
+      summary: Update settings
+      responses:
+        '200':
+          description: OK
+  /api/v1/reports/attendance.xlsx:
+    get:
+      summary: Export attendance to Excel
+      responses:
+        '200':
+          description: OK
+  /actuator/health:
+    get:
+      summary: Health check
+      responses:
+        '200':
+          description: OK

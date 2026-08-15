@@ -1,91 +1,56 @@
 package com.iot.attendance.service;
 
-import com.iot.attendance.dto.AttendanceSettings;
-import com.iot.attendance.entity.AttendanceRecord;
-import com.iot.attendance.entity.User;
-import com.iot.attendance.repository.AttendanceRecordRepository;
-import com.iot.attendance.repository.UserRepository;
-import org.springframework.beans.factory.annotation.Autowired;
+import com.iot.attendance.entity.AttendanceLog;
+import com.iot.attendance.entity.Student;
+import com.iot.attendance.entity.VerificationLog;
+import com.iot.attendance.repository.AttendanceLogRepository;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDate;
 import java.time.LocalTime;
 import java.time.OffsetDateTime;
 import java.time.ZoneId;
-import java.time.ZoneOffset;import java.util.List;
-import java.util.Optional;
-import java.util.UUID;
+import java.time.ZonedDateTime;
+import java.time.temporal.ChronoUnit;
 
 @Service
 public class AttendanceService {
-    private static final ZoneId SCHOOL_ZONE = ZoneId.of("Asia/Ho_Chi_Minh");
 
-    @Autowired
-    private AttendanceRecordRepository attendanceRecordRepository;
+    private final AttendanceLogRepository attendanceLogRepository;
 
-    @Autowired
-    private UserRepository userRepository;
-
-    @Autowired
-    private SystemSettingsService systemSettingsService;
-
-    public List<AttendanceRecord> getAllRecords() {
-        return attendanceRecordRepository.findAll();
+    public AttendanceService(AttendanceLogRepository attendanceLogRepository) {
+        this.attendanceLogRepository = attendanceLogRepository;
     }
 
-    public List<AttendanceRecord> getTodayRecords() {
-        LocalDate today = LocalDate.now();
-        return getRecordsBetween(today.atStartOfDay().atOffset(ZoneOffset.UTC), today.plusDays(1).atStartOfDay().atOffset(ZoneOffset.UTC));
-    }
-
-    public List<AttendanceRecord> getRecordsByUser(UUID userId) {
-        Optional<User> user = userRepository.findById(userId);
-        return user.map(attendanceRecordRepository::findByUser).orElse(List.of());
-    }
-
-    public List<AttendanceRecord> getRecordsBetween(OffsetDateTime start, OffsetDateTime end) {
-        return attendanceRecordRepository.findByCheckInTimeBetween(start, end);
-    }
-
-public AttendanceRecord recordAttendance(UUID userId, OffsetDateTime checkInTime, String status, String method) {
-        Optional<User> user = userRepository.findById(userId);
-        if (user.isEmpty()) {
-            throw new RuntimeException("User not found");
+    public AttendanceLog recordAttendance(Student student, VerificationLog verificationLog) {
+        ZoneId zoneId = ZoneId.of("Asia/Ho_Chi_Minh");
+        ZonedDateTime now = ZonedDateTime.now(zoneId);
+        LocalDate date = now.toLocalDate();
+        LocalTime time = now.toLocalTime();
+        
+        LocalTime cutoff = LocalTime.of(7, 30, 0);
+        
+        String status = "ON_TIME";
+        Integer lateMinutes = 0;
+        
+        if (time.isAfter(cutoff)) {
+            status = "LATE";
+            lateMinutes = (int) Math.ceil(ChronoUnit.SECONDS.between(cutoff, time) / 60.0);
         }
-        if ("IN".equals(status)) {
-            AttendanceRecord existing = findExistingOnDay(user.get(), checkInTime);
-            if (existing != null) {
-                return existing;
-            }
+
+        AttendanceLog log = new AttendanceLog();
+        log.setStudent(student);
+        log.setVerification(verificationLog);
+        log.setAttendanceDate(date);
+        log.setCheckTime(OffsetDateTime.now());
+        log.setStatus(status);
+        log.setLateMinutes(lateMinutes);
+
+        try {
+            return attendanceLogRepository.save(log);
+        } catch (DataIntegrityViolationException e) {
+            throw new RuntimeException("ALREADY_CHECKED_IN");
         }
-        AttendanceRecord record = new AttendanceRecord();
-        record.setUser(user.get());
-        record.setCheckInTime(checkInTime);
-        record.setStatus("IN".equals(status) && isLate(checkInTime) ? "LATE" : status);
-        record.setMethod(method);
-        return attendanceRecordRepository.save(record);
-    }
-
-    public boolean deleteAttendanceRecord(UUID id) {
-        if (!attendanceRecordRepository.existsById(id)) {
-            return false;
-        }
-        attendanceRecordRepository.deleteById(id);
-        return true;
-    }
-
-    private AttendanceRecord findExistingOnDay(User user, OffsetDateTime checkInTime) {
-        LocalDate localDay = checkInTime.atZoneSameInstant(SCHOOL_ZONE).toLocalDate();
-        OffsetDateTime dayStart = localDay.atStartOfDay().atZone(SCHOOL_ZONE).toOffsetDateTime();
-        OffsetDateTime dayEnd = localDay.plusDays(1).atStartOfDay().atZone(SCHOOL_ZONE).toOffsetDateTime();
-        return attendanceRecordRepository.findByUserAndCheckInTimeBetween(user, dayStart, dayEnd)
-                .stream().findFirst().orElse(null);
-    }
-
-    private boolean isLate(OffsetDateTime checkInTime) {
-        AttendanceSettings settings = systemSettingsService.getAttendanceSettings();
-        LocalTime threshold = settings.getClassStartTime().plusMinutes(settings.getLateGraceMinutes());
-        LocalTime localTime = checkInTime.atZoneSameInstant(SCHOOL_ZONE).toLocalTime();
-        return localTime.isAfter(threshold);
     }
 }

@@ -1,30 +1,28 @@
 package com.iot.attendance.controller;
 
-import com.iot.attendance.entity.AssistanceRequest;
 import com.iot.attendance.service.AssistanceService;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
-
-import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 @RestController
-@RequestMapping("/api/assistance")
+@RequestMapping("/api/v1/assistance")
 public class AssistanceController {
 
-    @Autowired
-    private AssistanceService assistanceService;
+    private final AssistanceService service;
 
-    @GetMapping
-    public ResponseEntity<List<AssistanceRequest>> getAllRequests() {
-        return ResponseEntity.ok(assistanceService.getAllRequests());
+    public AssistanceController(AssistanceService service) {
+        this.service = service;
     }
 
-    @PostMapping
-    public ResponseEntity<AssistanceRequest> createRequest(
-            @RequestParam(required = false) UUID userId,
-            @RequestParam String message) {
-        return ResponseEntity.ok(assistanceService.createRequest(userId, message));
+    @GetMapping
+    public ResponseEntity<?> getAll() {
+        return ResponseEntity.ok(service.getAll());
+    }
+
+    @PatchMapping("/{id}/status")
+    public ResponseEntity<?> updateStatus(@PathVariable UUID id, @RequestBody Map<String, String> body) {
+        return ResponseEntity.ok(service.updateStatus(id, body.get("status")));
     }
 }

@@ -1,53 +1,92 @@
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080/api';
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080/api/v1';
 
-async function request(path, options) {
-  const response = await fetch(`${API_BASE_URL}${path}`, options);
+async function request(path, options = {}) {
+  const token = localStorage.getItem('token');
+  const headers = {
+    'Content-Type': 'application/json',
+    ...options.headers,
+  };
+
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
+
+  const response = await fetch(`${API_BASE_URL}${path}`, { ...options, headers });
+  
+  if (response.status === 401) {
+    localStorage.removeItem('token');
+    localStorage.removeItem('role');
+    localStorage.removeItem('user');
+    window.location.href = '/login';
+    throw new Error('Unauthorized');
+  }
+
   if (!response.ok) {
     const message = await response.text();
     throw new Error(message || `Request failed with status ${response.status}`);
   }
+
   if (response.status === 204) return null;
+  
+  // if content is excel, we handle it differently (blob)
+  const contentType = response.headers.get('content-type');
+  if (contentType && contentType.includes('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')) {
+    return response.blob();
+  }
+
   return response.json();
 }
 
 export const apiClient = {
+  login: (credentials) => request('/auth/login', {
+    method: 'POST',
+    body: JSON.stringify(credentials),
+  }),
   getUsers: () => request('/users'),
-  getUserByRfid: (rfidUid) => request(`/users/rfid/${encodeURIComponent(rfidUid)}`),
   createUser: (user) => request('/users', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(user),
   }),
   updateUser: (id, user) => request(`/users/${id}`, {
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
+    method: 'PATCH',
     body: JSON.stringify(user),
   }),
   deleteUser: (id) => request(`/users/${id}`, { method: 'DELETE' }),
-  getAttendanceRecords: () => request('/attendance'),
+  uploadFace: (id, file) => {
+    const formData = new FormData();
+    formData.append('image', file);
+    return fetch(`${API_BASE_URL}/users/${id}/face`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${localStorage.getItem('token')}`
+      },
+      body: formData,
+    }).then(async res => {
+      if (!res.ok) {
+         const message = await res.text();
+         throw new Error(message || 'Failed to upload face');
+      }
+      return res.json();
+    });
+  },
+  getAttendance: (params) => {
+    const searchParams = new URLSearchParams(params);
+    return request(`/attendance?${searchParams}`);
+  },
   getTodayAttendance: () => request('/attendance/today'),
-  getUserAttendance: (userId) => request(`/attendance/user/${userId}`),
-  deleteAttendanceRecord: (id) => request(`/attendance/${id}`, { method: 'DELETE' }),
+  getAttendanceStats: () => request('/attendance/stats'),
   getAssistanceRequests: () => request('/assistance'),
+  updateAssistanceStatus: (id, status) => request(`/assistance/${id}/status`, {
+    method: 'PATCH',
+    body: JSON.stringify({ status })
+  }),
+  getSettings: () => request('/settings'),
+  updateSettings: (settings) => request('/settings', {
+    method: 'PATCH',
+    body: JSON.stringify(settings),
+  }),
+  downloadReport: () => request('/reports/attendance.xlsx'),
   startRfidEnrollment: () => request('/rfid-enrollment/start', { method: 'POST' }),
   getRfidEnrollment: () => request('/rfid-enrollment'),
-  cancelRfidEnrollment: () => request('/rfid-enrollment/cancel', { method: 'POST' }),
-  getAttendanceBetween(start, end) {
-    const params = new URLSearchParams({ start, end });
-    return request(`/attendance/between?${params}`);
-  },
-  getSettings: () => request('/settings'),
-  updateSettings(settings) {
-    return request('/settings', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(settings),
-    });
-  },
-  recordAttendance(data) {
-    const params = new URLSearchParams(data);
-    return request(`/attendance?${params}`, {
-      method: 'POST',
-    });
-  },
+  cancelRfidEnrollment: () => request('/rfid-enrollment/cancel', { method: 'POST' })
 };

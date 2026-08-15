@@ -18,8 +18,8 @@ const now = new Date();
 const todayKey = dateKey(now);
 const yesterdayKey = shiftDate(now, -1);
 
-const statusLabels = { IN: 'Vào', OUT: 'Ra', LATE: 'Đi muộn' };
-const statusBadge = { IN: 'badge-success', OUT: 'badge-info', LATE: 'badge-warning' };
+const statusLabels = { ON_TIME: 'Đúng giờ', LATE: 'Đi muộn' };
+const statusBadge = { ON_TIME: 'badge-success', LATE: 'badge-warning' };
 
 export default function History() {
   const [records, setRecords] = useState([]);
@@ -31,10 +31,8 @@ export default function History() {
 
   const loadRecords = async (date, silent = false) => {
     if (!silent) setLoading(true);
-    const start = new Date(`${date}T00:00:00`);
-    const end = new Date(start.getTime() + 24 * 60 * 60 * 1000);
     try {
-      setRecords(await apiClient.getAttendanceBetween(start.toISOString(), end.toISOString()));
+      setRecords(await apiClient.getAttendance({ date }));
       setError('');
     } catch {
       if (!silent) setError('Không thể tải lịch sử điểm danh.');
@@ -46,8 +44,6 @@ export default function History() {
   useEffect(() => {
     setVisibleCount(PAGE_SIZE);
     loadRecords(filters.date);
-    const intervalId = window.setInterval(() => loadRecords(filters.date, true), 3000);
-    return () => window.clearInterval(intervalId);
   }, [filters.date]);
 
   const keyword = filters.keyword.trim().toLowerCase();
@@ -61,32 +57,23 @@ export default function History() {
 
   const setDate = (value) => setFilters({ ...filters, date: value });
 
-  const handleDelete = async (record) => {
-    if (!window.confirm(`Xóa lượt điểm danh lúc ${new Date(record.checkInTime).toLocaleString('vi-VN')} của ${record.user?.name || 'người dùng'}?`)) return;
+  const exportCsv = async () => {
     try {
-      await apiClient.deleteAttendanceRecord(record.id);
-      setRecords((current) => current.filter((item) => item.id !== record.id));
-      setError('');
-      toast('Đã xóa lượt điểm danh.', 'success');
+      const blob = await apiClient.downloadReport();
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(blob);
+      link.download = `attendance-report.xlsx`;
+      link.click();
+      URL.revokeObjectURL(link.href);
+      toast('Đã tải báo cáo Excel.', 'success');
     } catch {
-      setError('Không thể xóa lượt điểm danh này.');
+      toast('Lỗi khi tải báo cáo.', 'error');
     }
-  };
-
-  const exportCsv = () => {
-    const rows = [['Thời gian', 'MSSV', 'Họ và tên', 'Phương thức', 'Trạng thái'], ...filtered.map((record) => [record.checkInTime, record.user?.mssv || '', record.user?.name || '', record.method || '', statusLabels[record.status] || record.status])];
-    const csv = rows.map((row) => row.map((cell) => `"${String(cell).replaceAll('"', '""')}"`).join(',')).join('\n');
-    const link = document.createElement('a');
-    link.href = URL.createObjectURL(new Blob([`\ufeff${csv}`], { type: 'text/csv;charset=utf-8' }));
-    link.download = `attendance-${filters.date}.csv`;
-    link.click();
-    URL.revokeObjectURL(link.href);
-    toast('Đã xuất file CSV.', 'success');
   };
 
   return (
     <div className="page-stack">
-      <PageHeader title="Lịch sử điểm danh" description="Tra cứu, lọc và xuất dữ liệu vận hành" actions={<Button variant="primary" onClick={exportCsv} disabled={!filtered.length}><Download size={16} /> Xuất CSV</Button>} />
+      <PageHeader title="Lịch sử điểm danh" description="Tra cứu, lọc và xuất báo cáo" actions={<Button variant="primary" onClick={exportCsv} disabled={!filtered.length}><Download size={16} /> Xuất Excel</Button>} />
       <ErrorBanner message={error} onRetry={() => loadRecords(filters.date)} />
       <Panel>
         <div className="filter-bar">
@@ -97,15 +84,26 @@ export default function History() {
           </div>
           <input className="input compact-input" type="date" value={filters.date} onChange={(event) => setDate(event.target.value)} />
           <select className="input compact-input" value={filters.status} onChange={(event) => setFilters({ ...filters, status: event.target.value })}>
-            <option value="ALL">Tất cả trạng thái</option><option value="IN">Vào</option><option value="OUT">Ra</option><option value="LATE">Đi muộn</option>
+            <option value="ALL">Tất cả trạng thái</option>
+            <option value="ON_TIME">Đúng giờ</option>
+            <option value="LATE">Đi muộn</option>
           </select>
           <span className="result-count">{filtered.length} kết quả</span>
         </div>
         <div className={`table-container${loading ? ' loading' : ''}`}>
           <table>
-            <thead><tr><th>Thời gian</th><th>MSSV</th><th>Họ và tên</th><th>Phương thức</th><th>Trạng thái</th><th></th></tr></thead>
+            <thead><tr><th>Thời gian</th><th>Ngày</th><th>MSSV</th><th>Họ và tên</th><th>Trạng thái</th><th>Số phút muộn</th></tr></thead>
             <tbody>
-              {visible.map((record, index) => <tr key={record.id} style={{ animationDelay: `${index * 30}ms` }}><td>{new Date(record.checkInTime).toLocaleString('vi-VN')}</td><td className="cell-code">{record.user?.mssv || '-'}</td><td>{record.user?.name || 'Không xác định'}</td><td>{record.method || '-'}</td><td><span className={`badge ${statusBadge[record.status] || 'badge-success'}`}>{statusLabels[record.status] || record.status}</span></td><td><button className="icon-btn" onClick={() => handleDelete(record)} aria-label="Xóa lượt điểm danh" title="Xóa lượt điểm danh"><Trash2 size={16} /></button></td></tr>)}
+              {visible.map((record, index) => (
+                <tr key={record.id} style={{ animationDelay: `${index * 30}ms` }}>
+                  <td>{new Date(record.checkInTime).toLocaleTimeString('vi-VN')}</td>
+                  <td>{record.attendanceDate || '-'}</td>
+                  <td className="cell-code">{record.user?.mssv || '-'}</td>
+                  <td>{record.user?.name || 'Không xác định'}</td>
+                  <td><span className={`badge ${statusBadge[record.status] || 'badge-success'}`}>{statusLabels[record.status] || record.status}</span></td>
+                  <td>{record.lateMinutes || '-'}</td>
+                </tr>
+              ))}
               {!loading && !filtered.length && <tr><td colSpan="6"><div className="empty-state">Không có dữ liệu phù hợp.</div></td></tr>}
               {loading && <tr><td colSpan="6"><div className="empty-state"><SkeletonTable rows={8} cols={6} /></div></td></tr>}
             </tbody>

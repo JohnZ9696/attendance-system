@@ -1,9 +1,10 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { Activity, Clock3, RefreshCw, UserCheck, Users } from 'lucide-react';
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { apiClient } from '../api/client';
 import { Button, ErrorBanner, PageHeader, Panel } from '../components/ui';
 import { SkeletonCard, SkeletonChart } from '../components/Skeleton';
+import { useSSE } from '../hooks/useSSE';
 
 const timeFormatter = new Intl.DateTimeFormat('vi-VN', { hour: '2-digit', minute: '2-digit' });
 const dateFormatter = new Intl.DateTimeFormat('vi-VN', { dateStyle: 'full' });
@@ -32,6 +33,8 @@ export default function Dashboard() {
   const [data, setData] = useState({ users: [], records: [] });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  
+  const { events } = useSSE('/monitor/events');
 
   const loadData = async (silent = false) => {
     if (!silent) setLoading(true);
@@ -48,16 +51,39 @@ export default function Dashboard() {
 
   useEffect(() => {
     loadData();
-    const intervalId = window.setInterval(() => loadData(true), 3000);
-    return () => window.clearInterval(intervalId);
   }, []);
 
-  const attendedIds = new Set(data.records.map((record) => record.user?.id));
-  const lateCount = data.records.filter((record) => record.status === 'LATE').length;
-  const recent = [...data.records]
+  // Merge SSE attendance_events into current records
+  const currentRecords = useMemo(() => {
+    const sseRecords = events
+      .filter(e => e.type === 'attendance_event')
+      .map(e => ({
+        id: e.data.studentId + e.data.checkTime, // faux id for key
+        checkInTime: e.data.checkTime,
+        status: e.data.status,
+        lateMinutes: e.data.lateMinutes,
+        user: { id: e.data.studentId, name: e.data.studentName, mssv: e.data.studentId }
+      }));
+
+    // Simple deduplication based on studentId (assuming 1 per day rule)
+    const combined = [...data.records];
+    sseRecords.forEach(sse => {
+      const existingIdx = combined.findIndex(r => r.user?.id === sse.user.id);
+      if (existingIdx >= 0) {
+        combined[existingIdx] = sse;
+      } else {
+        combined.push(sse);
+      }
+    });
+    return combined;
+  }, [data.records, events]);
+
+  const attendedIds = new Set(currentRecords.map((record) => record.user?.id));
+  const lateCount = currentRecords.filter((record) => record.status === 'LATE').length;
+  const recent = [...currentRecords]
     .sort((a, b) => new Date(b.checkInTime) - new Date(a.checkInTime))
     .slice(0, 6);
-  const timeline = buildTimeline(data.records);
+  const timeline = buildTimeline(currentRecords);
   const stats = [
     { label: 'Người dùng', value: data.users.length, icon: Users, tone: 'blue' },
     { label: 'Đã điểm danh', value: attendedIds.size, icon: UserCheck, tone: 'green' },
@@ -115,8 +141,16 @@ export default function Dashboard() {
             {recent.map((record) => (
               <div className="activity-row" key={record.id}>
                 <span className="initials">{record.user?.name?.slice(0, 1) || '?'}</span>
-                <div className="activity-person"><strong>{record.user?.name || 'Không xác định'}</strong><span>{record.user?.mssv || 'Chưa có MSSV'}</span></div>
-                <div className="activity-meta"><span className={`badge ${record.status === 'LATE' ? 'badge-warning' : 'badge-success'}`}>{record.status === 'LATE' ? 'Đi muộn' : 'Đúng giờ'}</span><time>{relativeTime(new Date(record.checkInTime))}</time></div>
+                <div className="activity-person">
+                  <strong>{record.user?.name || 'Không xác định'}</strong>
+                  <span>{record.user?.mssv || 'Chưa có MSSV'}</span>
+                </div>
+                <div className="activity-meta">
+                  <span className={`badge ${record.status === 'LATE' ? 'badge-warning' : 'badge-success'}`}>
+                    {record.status === 'LATE' ? `Đi muộn ${record.lateMinutes ? '('+record.lateMinutes+'p)' : ''}` : 'Đúng giờ'}
+                  </span>
+                  <time>{relativeTime(new Date(record.checkInTime))}</time>
+                </div>
               </div>
             ))}
             {!recent.length && <div className="empty-state">Chưa có hoạt động.</div>}

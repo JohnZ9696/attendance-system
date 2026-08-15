@@ -1,4 +1,7 @@
 24127345_24127346_24127475.pdf
+requirements.md
+DATABASE_ALIGNMENT_FACE_RFID.md
+SDD_AGENT_FLOW_FACE_RFID.md
 skills
 PLANS.md
 todo.md
@@ -62,5 +65,6 @@ frontend/dist-ssr/
 *.njsproj
 *.sln
 *.sw?
+.venv/
 
 opencode.json

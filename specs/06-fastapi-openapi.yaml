@@ -1,0 +1,91 @@
+openapi: 3.0.0
+info:
+  title: FastAPI CV Internal API
+  version: 1.0.0
+paths:
+  /internal/v1/cameras/{cameraId}/frames:
+    post:
+      summary: Upload JPEG frame from ESP32-CAM
+      parameters:
+        - name: cameraId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          image/jpeg:
+            schema:
+              type: string
+              format: binary
+      responses:
+        '200':
+          description: OK
+  /internal/v1/verifications:
+    post:
+      summary: Request verification for expected user
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                sessionId:
+                  type: string
+                expectedUserId:
+                  type: string
+                cameraId:
+                  type: string
+                captureTimeoutMs:
+                  type: integer
+                matchTimeoutMs:
+                  type: integer
+      responses:
+        '200':
+          description: OK
+  /internal/v1/verifications/{sessionId}:
+    get:
+      summary: Get verification result (if async)
+      parameters:
+        - name: sessionId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  verificationSessionId:
+                    type: string
+                  expectedUserId:
+                    type: string
+                  cameraId:
+                    type: string
+                  result:
+                    type: string
+                  similarityPercent:
+                    type: number
+                  thresholdPercent:
+                    type: number
+                  livenessPassed:
+                    type: boolean
+                  modelName:
+                    type: string
+                  modelVersion:
+                    type: string
+                  processedAt:
+                    type: string
+                    format: date-time
+                  failureReason:
+                    type: string
+  /health:
+    get:
+      summary: Service and model readiness check
+      responses:
+        '200':
+          description: OK

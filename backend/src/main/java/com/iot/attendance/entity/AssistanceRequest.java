@@ -9,33 +9,50 @@ import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
+import lombok.Getter;
+import lombok.Setter;
+import org.hibernate.annotations.CreationTimestamp;
+import org.hibernate.annotations.UpdateTimestamp;
 
 import java.time.OffsetDateTime;
 import java.util.UUID;
 
 @Entity
 @Table(name = "assistance_requests")
+@Getter
+@Setter
 public class AssistanceRequest {
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
     private UUID id;
 
-    @ManyToOne(fetch = FetchType.EAGER)
+    @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "student_id")
-    private User user;
+    private Student student;
+
+    @Column(name = "source")
+    private String source; // PUSH_BUTTON, WEB
 
     @Column(nullable = false)
     private String message;
 
-    @Column(name = "created_at", insertable = false, updatable = false)
+    @Column(name = "status")
+    private String status; // OPEN, ACKNOWLEDGED, RESOLVED
+
+    @Column(name = "notification_sent")
+    private Boolean notificationSent = false;
+
+    @Column(name = "notification_error")
+    private String notificationError;
+
+    @CreationTimestamp
+    @Column(name = "created_at", updatable = false)
     private OffsetDateTime createdAt;
 
-    public UUID getId() { return id; }
-    public void setId(UUID id) { this.id = id; }
-    public User getUser() { return user; }
-    public void setUser(User user) { this.user = user; }
-    public String getMessage() { return message; }
-    public void setMessage(String message) { this.message = message; }
-    public OffsetDateTime getCreatedAt() { return createdAt; }
-    public void setCreatedAt(OffsetDateTime createdAt) { this.createdAt = createdAt; }
+    @UpdateTimestamp
+    @Column(name = "updated_at")
+    private OffsetDateTime updatedAt;
+
+    @Column(name = "resolved_at")
+    private OffsetDateTime resolvedAt;
 }
