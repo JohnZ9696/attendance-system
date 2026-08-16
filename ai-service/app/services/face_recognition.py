@@ -2,6 +2,7 @@ from dataclasses import dataclass
 from typing import Optional
 
 import cv2
+import logging
 import numpy as np
 from deepface import DeepFace
 
@@ -9,6 +10,8 @@ from deepface import DeepFace
 MODEL_NAME = "Facenet512"
 MODEL_VERSION = "deepface-0.0.93"
 EXPECTED_DIMENSION = 512
+
+logger = logging.getLogger("uvicorn.error")
 
 
 @dataclass
@@ -28,13 +31,18 @@ def extract_face_embedding(
 
     height, width = frame.shape[:2]
     gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+
+    # Điểm tạm thời của toàn ảnh. Sau khi phát hiện khuôn mặt,
+    # giá trị này sẽ được tính lại trên riêng vùng khuôn mặt.
     blur_score = float(cv2.Laplacian(gray, cv2.CV_64F).var())
 
-    if require_enrollment_quality:
-        if min(height, width) < 240:
-            return FaceEmbeddingResult(None, 0, blur_score, "IMAGE_TOO_SMALL")
-        if blur_score < 40.0:
-            return FaceEmbeddingResult(None, 0, blur_score, "IMAGE_TOO_BLURRY")
+    if require_enrollment_quality and min(height, width) < 240:
+        return FaceEmbeddingResult(
+            None,
+            0,
+            blur_score,
+            "IMAGE_TOO_SMALL",
+        )
 
     try:
         results = DeepFace.represent(
@@ -45,19 +53,84 @@ def extract_face_embedding(
             align=True,
             normalization="Facenet",
         )
-    except ValueError:
-        return FaceEmbeddingResult(None, 0, blur_score, "NO_FACE")
+    except ValueError as exception:
+        logger.warning("Khong phat hien khuon mat: %s", exception)
+        return FaceEmbeddingResult(
+            None,
+            0,
+            blur_score,
+            "NO_FACE",
+        )
     except Exception:
-        return FaceEmbeddingResult(None, 0, blur_score, "MODEL_ERROR")
+        logger.exception("DeepFace model error")
+        return FaceEmbeddingResult(
+            None,
+            0,
+            blur_score,
+            "MODEL_ERROR",
+        )
 
     if len(results) != 1:
-        return FaceEmbeddingResult(None, len(results), blur_score, "MULTIPLE_FACES")
+        return FaceEmbeddingResult(
+            None,
+            len(results),
+            blur_score,
+            "MULTIPLE_FACES",
+        )
 
-    embedding = [float(value) for value in results[0]["embedding"]]
+    result = results[0]
+
+    # Tính độ nét trên vùng khuôn mặt thay vì toàn bộ ảnh.
+    area = result.get("facial_area") or {}
+    x = max(0, int(area.get("x", 0)))
+    y = max(0, int(area.get("y", 0)))
+    w = int(area.get("w", width))
+    h = int(area.get("h", height))
+
+    face_gray = gray[
+        y:min(y + h, height),
+        x:min(x + w, width),
+    ]
+
+    if face_gray.size > 0:
+        blur_score = float(
+            cv2.Laplacian(face_gray, cv2.CV_64F).var()
+        )
+
+    logger.info(
+        "Face detected: count=%d blur_score=%.2f area=%s",
+        len(results),
+        blur_score,
+        area,
+    )
+
+    # Ngưỡng 20 phù hợp hơn để kiểm thử bằng ảnh web/ESP32-CAM.
+    if require_enrollment_quality and blur_score < 20.0:
+        return FaceEmbeddingResult(
+            None,
+            1,
+            blur_score,
+            "IMAGE_TOO_BLURRY",
+        )
+
+    embedding = [
+        float(value)
+        for value in result["embedding"]
+    ]
+
     if len(embedding) != EXPECTED_DIMENSION:
-        return FaceEmbeddingResult(None, 1, blur_score, "INVALID_EMBEDDING_DIMENSION")
+        return FaceEmbeddingResult(
+            None,
+            1,
+            blur_score,
+            "INVALID_EMBEDDING_DIMENSION",
+        )
 
-    return FaceEmbeddingResult(embedding, 1, blur_score)
+    return FaceEmbeddingResult(
+        embedding,
+        1,
+        blur_score,
+    )
 
 
 def calculate_similarity_percent(
