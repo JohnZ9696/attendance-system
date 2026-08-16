@@ -62,12 +62,14 @@ async def upload_frame(
 
 @router.get("/{camera_id}/preview.jpg", tags=["frames"])
 async def latest_camera_frame(camera_id: str):
-    frame = get_buffer(camera_id).latest_frame()
+    frame = get_buffer(camera_id).latest_frame(
+        max_age_ms=5_000,
+    )
 
     if frame is None:
         raise HTTPException(
             status_code=404,
-            detail="CAMERA_OFFLINE",
+            detail="NO_FRESH_CAMERA_FRAME",
         )
 
     encoded_ok, encoded = cv2.imencode(
@@ -119,7 +121,9 @@ async def get_capture_command(
 async def get_camera_status(camera_id: str):
     online = is_camera_online(camera_id)
     capture_active = is_camera_capture_active(camera_id)
-    latest_frame = get_buffer(camera_id).latest_frame()
+    latest_frame = get_buffer(camera_id).latest_frame(
+        max_age_ms=5_000,
+    )
 
     return {
         "cameraId": camera_id,

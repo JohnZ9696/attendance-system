@@ -190,7 +190,7 @@ async def run_verification(request: VerificationRequest) -> VerificationResponse
     async with get_camera_lock(request.cameraId):
         started_ms = int(time.time() * 1000)
         capture_deadline = started_ms + request.captureTimeoutMs
-        first_frame_deadline = started_ms + 2_500
+        first_frame_deadline = started_ms + 10000
         buffer = get_buffer(request.cameraId)
         detector = BlinkDetector()
 

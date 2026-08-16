@@ -74,9 +74,9 @@ public class FastApiClient {
                 .bodyValue(request)
                 .retrieve()
                 .bodyToMono(CvVerificationResponse.class)
-                .timeout(Duration.ofSeconds(20));
+                .timeout(Duration.ofSeconds(60));
     }
-    
+
     public Mono<Map> extractFaceEmbedding(MultipartFile file) {
         try {
             MultipartBodyBuilder builder = new MultipartBodyBuilder();

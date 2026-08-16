@@ -22,6 +22,9 @@ export default function Monitoring() {
     hasPreview: false,
   });
 
+  const [previewUrl, setPreviewUrl] = useState('');
+  const [previewLoaded, setPreviewLoaded] = useState(false);
+
   const aiBaseUrl =
     import.meta.env.VITE_AI_BASE_URL ||
     'http://localhost:8000';
@@ -48,10 +51,30 @@ export default function Monitoring() {
     };
 
     loadStatus();
-    const timer = setInterval(loadStatus, 1000);
+    const timer = setInterval(loadStatus, 500);
 
     return () => clearInterval(timer);
   }, [aiBaseUrl]);
+
+  useEffect(() => {
+    if (!cameraStatus.captureActive) {
+      setPreviewLoaded(false);
+      setPreviewUrl('');
+      return;
+    }
+
+    const refreshPreview = () => {
+      setPreviewUrl(
+        `${aiBaseUrl}/internal/v1/cameras/${CAMERA_ID}/preview.jpg?t=${Date.now()}`
+      );
+    };
+
+    refreshPreview();
+
+    const timer = setInterval(refreshPreview, 400);
+
+    return () => clearInterval(timer);
+  }, [cameraStatus.captureActive, aiBaseUrl]);
 
   useEffect(() => {
     const latest = events[0];
@@ -153,46 +176,51 @@ export default function Monitoring() {
       <div className="grid-content">
         {/* Camera Live Preview */}
         <div className="card col-span-2 flex-col">
-          <div className="flex items-center justify-between mb-4">
+          <div className="camera-title-row">
             <h3 className="flex items-center gap-2">
               <Camera size={20} />
               Camera trực tiếp
             </h3>
 
             <span
-              className={`badge ${
-                cameraStatus.online ? 'badge-success' : 'badge-warning'
+              className={`camera-badge ${
+                cameraStatus.online ? 'camera-online' : 'camera-offline'
               }`}
             >
               {cameraStatus.online ? 'ONLINE' : 'OFFLINE'}
             </span>
           </div>
 
-          <div
-            style={{
-              minHeight: '360px',
-              display: 'grid',
-              placeItems: 'center',
-              background: '#111827',
-              borderRadius: '10px',
-              overflow: 'hidden',
-            }}
-          >
-            {cameraStatus.hasPreview ? (
+          <div className="camera-preview">
+            {cameraStatus.captureActive && previewUrl && (
               <img
-                src={`${aiBaseUrl}/internal/v1/cameras/${CAMERA_ID}/preview.jpg?t=${Date.now()}`}
-                alt="ESP32-CAM preview"
-                style={{
-                  width: '100%',
-                  maxHeight: '520px',
-                  objectFit: 'contain',
-                }}
+                src={previewUrl}
+                alt="ESP32-CAM trực tiếp"
+                onLoad={() => setPreviewLoaded(true)}
+                onError={() => setPreviewLoaded(false)}
               />
-            ) : (
-              <div style={{ color: 'var(--text-muted)' }}>
-                Camera online - đang chờ RFID
+            )}
+
+            {!cameraStatus.online && (
+              <div className="camera-placeholder">
+                ESP32-CAM đang offline
               </div>
             )}
+
+            {cameraStatus.online &&
+              !cameraStatus.captureActive && (
+                <div className="camera-placeholder">
+                  Camera online - đang chờ RFID
+                </div>
+              )}
+
+            {cameraStatus.online &&
+              cameraStatus.captureActive &&
+              !previewLoaded && (
+                <div className="camera-placeholder">
+                  Đang chờ frame từ ESP32-CAM...
+                </div>
+              )}
           </div>
         </div>
 
@@ -208,7 +236,7 @@ export default function Monitoring() {
               {connected ? 'Trực tiếp' : 'Đang kết nối...'}
             </span>
           </div>
-          
+
           <div className="flex-col gap-2 p-3 rounded-md" style={{ background: 'var(--bg-base)', border: '1px solid var(--border-color)', height: '400px', overflowY: 'auto', fontFamily: 'monospace', fontSize: '13px', lineHeight: '1.5' }}>
             {logs.length > 0 ? logs : <p style={{ color: 'var(--text-muted)' }}>Đang chờ sự kiện...</p>}
           </div>
@@ -227,7 +255,7 @@ export default function Monitoring() {
                     <p className="text-sm text-muted">Trạng thái: {deviceStatuses[GATEWAY_DEVICE_ID].status}</p>
                   </div>
                 </div>
-                {deviceStatuses[GATEWAY_DEVICE_ID].status === 'ONLINE' ? 
+                {deviceStatuses[GATEWAY_DEVICE_ID].status === 'ONLINE' ?
                   <CheckCircle size={20} style={{ color: 'var(--status-success)' }} /> :
                   <AlertCircle size={20} style={{ color: 'var(--status-warning)' }} />
                 }
@@ -247,7 +275,7 @@ export default function Monitoring() {
                     </p>
                   </div>
                 </div>
-                {cameraStatus.online ? 
+                {cameraStatus.online ?
                   <CheckCircle size={20} style={{ color: 'var(--status-success)' }} /> :
                   <AlertCircle size={20} style={{ color: 'var(--status-warning)' }} />
                 }

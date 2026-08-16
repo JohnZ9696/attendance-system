@@ -7,14 +7,14 @@
 // Configuration
 // ============================================================================
 
-const char* WIFI_SSID = "Di Tu";
-const char* WIFI_PASSWORD = "68686868";
+const char* WIFI_SSID = "Minh Thu";
+const char* WIFI_PASSWORD = "camsaike";
 const char* INTERNAL_API_KEY = "s5HpmgoZ4Wl5A9v8pJ6qLuAyWIrAZLU_nP3W3AeaUDc";
-const char* API_URL = "http://192.168.1.13:8000/internal/v1/cameras/";
+const char* API_URL = "http://192.168.1.104:8000/internal/v1/cameras/";
 const char* CAMERA_ID = "cam-01";
 
 constexpr int FLASH_LED_PIN = 4;
-constexpr unsigned long FRAME_INTERVAL_MS = 250;
+constexpr unsigned long FRAME_INTERVAL_MS = 100;
 constexpr unsigned long BLINK_INTERVAL_MS = 250;
 constexpr unsigned long COMMAND_POLL_INTERVAL_MS = 500;
 
@@ -99,7 +99,7 @@ bool initCamera() {
 
   // FRAMESIZE_VGA, JPEG quality 12, 1 frame buffer
   config.frame_size = FRAMESIZE_VGA;
-  config.jpeg_quality = 12;
+  config.jpeg_quality = 15;
   config.fb_count = 1;
   config.grab_mode = CAMERA_GRAB_WHEN_EMPTY;
   config.fb_location = CAMERA_FB_IN_PSRAM;
@@ -188,67 +188,123 @@ void sendFrameRaw() {
   if (millis() - lastFrameMs < FRAME_INTERVAL_MS) {
     return;
   }
+
   lastFrameMs = millis();
 
-  if (WiFi.status() != WL_CONNECTED) {
-    Serial.println("WiFi offline");
-    return;
-  }
+  Serial.println("[FRAME] Getting camera frame...");
 
   camera_fb_t* fb = esp_camera_fb_get();
+
   if (!fb) {
-    Serial.println("Capture failed");
+    Serial.println("[FRAME] Capture failed");
     return;
   }
 
-  HTTPClient http;
-  String url = String(API_URL) + CAMERA_ID + "/frames";
-  http.begin(url);
+  Serial.printf(
+      "[FRAME] Captured %u bytes\n",
+      fb->len
+  );
 
-  http.addHeader("INTERNAL-API-KEY", INTERNAL_API_KEY);
+  HTTPClient http;
+  String url =
+      String(API_URL)
+      + CAMERA_ID
+      + "/frames";
+
+  http.begin(url);
+  http.setTimeout(10000);
+  http.addHeader(
+      "INTERNAL-API-KEY",
+      INTERNAL_API_KEY
+  );
 
   String boundary = "----ESP32CamBoundary";
-  http.addHeader("Content-Type", "multipart/form-data; boundary=" + boundary);
 
-  String head = "--" + boundary + "\r\n";
-  head += "Content-Disposition: form-data; name=\"cameraId\"\r\n\r\n";
+  http.addHeader(
+      "Content-Type",
+      "multipart/form-data; boundary=" + boundary
+  );
+
+  String head =
+      "--" + boundary + "\r\n";
+
+  head +=
+      "Content-Disposition: form-data; "
+      "name=\"cameraId\"\r\n\r\n";
+
   head += String(CAMERA_ID) + "\r\n";
 
-  String timestamp = getIsoTimestamp();
-  if (timestamp.length() > 0) {
-    head += "--" + boundary + "\r\n";
-    head += "Content-Disposition: form-data; name=\"timestamp\"\r\n\r\n";
-    head += timestamp + "\r\n";
-  }
-
   head += "--" + boundary + "\r\n";
-  head += "Content-Disposition: form-data; name=\"image\"; filename=\"frame.jpg\"\r\n";
+
+  head +=
+      "Content-Disposition: form-data; "
+      "name=\"image\"; filename=\"frame.jpg\"\r\n";
+
   head += "Content-Type: image/jpeg\r\n\r\n";
 
-  String tail = "\r\n--" + boundary + "--\r\n";
+  String tail =
+      "\r\n--" + boundary + "--\r\n";
 
-  size_t totalLen = head.length() + fb->len + tail.length();
+  size_t totalLen =
+      head.length()
+      + fb->len
+      + tail.length();
 
-  uint8_t *post_data = (uint8_t *)malloc(totalLen);
-  if (!post_data) {
-    Serial.println("Malloc failed");
+  uint8_t* postData = psramFound()
+      ? (uint8_t*)ps_malloc(totalLen)
+      : (uint8_t*)malloc(totalLen);
+
+  if (!postData) {
+    Serial.println("[FRAME] Malloc failed");
     esp_camera_fb_return(fb);
     http.end();
     return;
   }
 
-  memcpy(post_data, head.c_str(), head.length());
-  memcpy(post_data + head.length(), fb->buf, fb->len);
-  memcpy(post_data + head.length() + fb->len, tail.c_str(), tail.length());
+  memcpy(
+      postData,
+      head.c_str(),
+      head.length()
+  );
 
-  int code = http.POST(post_data, totalLen);
-  if (code > 0) {
-    Serial.printf("Frame sent, HTTP %d\n", code);
-  } else {
-    Serial.printf("Frame send failed: %s\n", http.errorToString(code).c_str());
+  memcpy(
+      postData + head.length(),
+      fb->buf,
+      fb->len
+  );
+
+  memcpy(
+      postData + head.length() + fb->len,
+      tail.c_str(),
+      tail.length()
+  );
+
+  Serial.printf(
+      "[FRAME] POST starting, total=%u bytes\n",
+      totalLen
+  );
+
+  unsigned long startedMs = millis();
+
+  int code = http.POST(
+      postData,
+      totalLen
+  );
+
+  Serial.printf(
+      "[FRAME] POST finished: HTTP=%d, time=%lu ms\n",
+      code,
+      millis() - startedMs
+  );
+
+  if (code < 0) {
+    Serial.printf(
+        "[FRAME] Error=%s\n",
+        http.errorToString(code).c_str()
+    );
   }
 
-  free(post_data);
+  free(postData);
   http.end();
   esp_camera_fb_return(fb);
 }
