@@ -8,29 +8,50 @@ import { Camera, Wifi, CheckCircle, AlertCircle } from 'lucide-react';
 import { useSSE } from '../hooks/useSSE';
 import { useToast } from '../components/useToast.js';
 
+const GATEWAY_DEVICE_ID = 'door-01';
+const CAMERA_ID = 'cam-01';
+
 export default function Monitoring() {
   const { events, connected } = useSSE('/monitor/events');
 
   const toast = useToast();
   const notifiedEventRef = useRef(null);
-  const [previewVersion, setPreviewVersion] = useState(Date.now());
-  const [cameraOnline, setCameraOnline] = useState(false);
+  const [cameraStatus, setCameraStatus] = useState({
+    online: false,
+    captureActive: false,
+    hasPreview: false,
+  });
 
   const aiBaseUrl =
     import.meta.env.VITE_AI_BASE_URL ||
     'http://localhost:8000';
 
-  const previewUrl =
-    `${aiBaseUrl}/internal/v1/cameras/cam-01/preview.jpg` +
-    `?t=${previewVersion}`;
-
   useEffect(() => {
-    const intervalId = window.setInterval(() => {
-      setPreviewVersion(Date.now());
-    }, 800);
+    const loadStatus = async () => {
+      try {
+        const response = await fetch(
+          `${aiBaseUrl}/internal/v1/cameras/${CAMERA_ID}/status`
+        );
 
-    return () => window.clearInterval(intervalId);
-  }, []);
+        if (!response.ok) {
+          throw new Error('Cannot load camera status');
+        }
+
+        setCameraStatus(await response.json());
+      } catch {
+        setCameraStatus({
+          online: false,
+          captureActive: false,
+          hasPreview: false,
+        });
+      }
+    };
+
+    loadStatus();
+    const timer = setInterval(loadStatus, 1000);
+
+    return () => clearInterval(timer);
+  }, [aiBaseUrl]);
 
   useEffect(() => {
     const latest = events[0];
@@ -108,8 +129,8 @@ export default function Monitoring() {
 
   const deviceStatuses = useMemo(() => {
     const devices = {
-      'ESP32_GATEWAY': { status: 'UNKNOWN', lastHeartbeat: null },
-      'ESP32_CAM': { status: 'UNKNOWN', lastHeartbeat: null }
+      [GATEWAY_DEVICE_ID]: { status: 'UNKNOWN', lastHeartbeat: null },
+      [CAMERA_ID]: { status: 'UNKNOWN', lastHeartbeat: null }
     };
     events.filter(e => e.type === 'device_status').forEach(e => {
       if (devices[e.data.deviceId]) {
@@ -140,10 +161,10 @@ export default function Monitoring() {
 
             <span
               className={`badge ${
-                cameraOnline ? 'badge-success' : 'badge-warning'
+                cameraStatus.online ? 'badge-success' : 'badge-warning'
               }`}
             >
-              {cameraOnline ? 'ONLINE' : 'OFFLINE'}
+              {cameraStatus.online ? 'ONLINE' : 'OFFLINE'}
             </span>
           </div>
 
@@ -157,17 +178,21 @@ export default function Monitoring() {
               overflow: 'hidden',
             }}
           >
-            <img
-              src={previewUrl}
-              alt="ESP32-CAM live preview"
-              onLoad={() => setCameraOnline(true)}
-              onError={() => setCameraOnline(false)}
-              style={{
-                width: '100%',
-                maxHeight: '520px',
-                objectFit: 'contain',
-              }}
-            />
+            {cameraStatus.hasPreview ? (
+              <img
+                src={`${aiBaseUrl}/internal/v1/cameras/${CAMERA_ID}/preview.jpg?t=${Date.now()}`}
+                alt="ESP32-CAM preview"
+                style={{
+                  width: '100%',
+                  maxHeight: '520px',
+                  objectFit: 'contain',
+                }}
+              />
+            ) : (
+              <div style={{ color: 'var(--text-muted)' }}>
+                Camera online - đang chờ RFID
+              </div>
+            )}
           </div>
         </div>
 
@@ -199,10 +224,10 @@ export default function Monitoring() {
                   <Wifi size={20} className="text-muted" />
                   <div>
                     <p style={{ fontWeight: 500 }}>ESP32 Gateway</p>
-                    <p className="text-sm text-muted">Trạng thái: {deviceStatuses['ESP32_GATEWAY'].status}</p>
+                    <p className="text-sm text-muted">Trạng thái: {deviceStatuses[GATEWAY_DEVICE_ID].status}</p>
                   </div>
                 </div>
-                {deviceStatuses['ESP32_GATEWAY'].status === 'ONLINE' ? 
+                {deviceStatuses[GATEWAY_DEVICE_ID].status === 'ONLINE' ? 
                   <CheckCircle size={20} style={{ color: 'var(--status-success)' }} /> :
                   <AlertCircle size={20} style={{ color: 'var(--status-warning)' }} />
                 }
@@ -213,10 +238,16 @@ export default function Monitoring() {
                   <Camera size={20} className="text-muted" />
                   <div>
                     <p style={{ fontWeight: 500 }}>ESP32-CAM</p>
-                    <p className="text-sm text-muted">Trạng thái: {cameraOnline ? 'ONLINE' : 'OFFLINE'}</p>
+                    <p className="text-sm text-muted">Trạng thái: {cameraStatus.online ? 'ONLINE' : 'OFFLINE'}</p>
+                    <p className="text-sm text-muted">
+                      Hoạt động:{' '}
+                      {cameraStatus.captureActive
+                        ? 'ĐANG XÁC THỰC'
+                        : 'ĐANG CHỜ RFID'}
+                    </p>
                   </div>
                 </div>
-                {cameraOnline ? 
+                {cameraStatus.online ? 
                   <CheckCircle size={20} style={{ color: 'var(--status-success)' }} /> :
                   <AlertCircle size={20} style={{ color: 'var(--status-warning)' }} />
                 }

@@ -2,17 +2,21 @@ from fastapi import APIRouter, UploadFile, File, HTTPException, Request
 from fastapi.responses import Response
 from typing import Annotated
 import cv2
+import logging
 import numpy as np
 import secrets
 from app.services.verification_manager import (
     get_buffer,
     is_camera_capture_active,
+    is_camera_online,
+    mark_camera_online,
 )
 from app.config import get_settings
 
 
 router = APIRouter(prefix="/internal/v1/cameras")
 settings = get_settings()
+logger = logging.getLogger("uvicorn.error")
 
 
 def check_internal_api_key(request: Request) -> None:
@@ -35,6 +39,7 @@ async def upload_frame(
     image: Annotated[UploadFile, File()],
 ):
     check_internal_api_key(request)
+    mark_camera_online(camera_id)
 
     if image.content_type not in {"image/jpeg", "image/png"}:
         raise HTTPException(status_code=415, detail="Only JPEG or PNG is accepted")
@@ -95,7 +100,30 @@ async def get_capture_command(
 ):
     check_internal_api_key(request)
 
+    mark_camera_online(camera_id)
+    active = is_camera_capture_active(camera_id)
+
+    logger.info(
+        "[CAPTURE COMMAND] camera=%s active=%s",
+        camera_id,
+        active,
+    )
+
     return {
         "cameraId": camera_id,
-        "active": is_camera_capture_active(camera_id),
+        "active": active,
+    }
+
+
+@router.get("/{camera_id}/status", tags=["frames"])
+async def get_camera_status(camera_id: str):
+    online = is_camera_online(camera_id)
+    capture_active = is_camera_capture_active(camera_id)
+    latest_frame = get_buffer(camera_id).latest_frame()
+
+    return {
+        "cameraId": camera_id,
+        "online": online,
+        "captureActive": capture_active,
+        "hasPreview": latest_frame is not None,
     }
