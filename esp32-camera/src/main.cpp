@@ -139,6 +139,7 @@ void pollCaptureCommand() {
 
   if (WiFi.status() != WL_CONNECTED) {
     captureRequested = false;
+    Serial.println("[COMMAND] WiFi offline");
     return;
   }
 
@@ -150,33 +151,31 @@ void pollCaptureCommand() {
   http.setTimeout(2000);
 
   int code = http.GET();
+  Serial.printf("[COMMAND] HTTP=%d\n", code);
 
   if (code == HTTP_CODE_OK) {
     String response = http.getString();
 
-    bool newCaptureRequested =
+    Serial.print("[COMMAND] Body=");
+    Serial.println(response);
+
+    response.replace(" ", "");
+    response.replace("\r", "");
+    response.replace("\n", "");
+
+    captureRequested =
         response.indexOf("\"active\":true") >= 0;
 
-    if (newCaptureRequested != captureRequested) {
-      captureRequested = newCaptureRequested;
-
-      Serial.println(
-          captureRequested
-              ? "Capture session started"
-              : "Capture session stopped"
-      );
-    }
+    Serial.printf(
+        "[COMMAND] captureRequested=%d\n",
+        captureRequested
+    );
   } else {
     captureRequested = false;
-
-    if (code < 0) {
-      Serial.printf(
-          "Capture command failed: %s\n",
-          http.errorToString(code).c_str()
-      );
-    } else {
-      Serial.printf("Capture command HTTP %d\n", code);
-    }
+    Serial.printf(
+        "[COMMAND] Error=%s\n",
+        http.errorToString(code).c_str()
+    );
   }
 
   http.end();
@@ -266,29 +265,25 @@ void setup() {
     Serial.println("Retrying camera init in 1s...");
     delay(1000);
   }
+
+  Serial.println("[CAMERA] Capture firmware V2 ready");
 }
 
 void loop() {
   if (WiFi.status() != WL_CONNECTED) {
-    if (millis() - lastBlinkMs > BLINK_INTERVAL_MS) {
-      lastBlinkMs = millis();
-      ledState = !ledState;
-      digitalWrite(FLASH_LED_PIN, ledState);
-    }
-    WiFi.reconnect();
-    return;
-  } else {
     digitalWrite(FLASH_LED_PIN, LOW);
+    WiFi.reconnect();
+    delay(500);
+    return;
   }
 
   pollCaptureCommand();
+  digitalWrite(FLASH_LED_PIN, LOW);
 
   if (captureRequested) {
-    // Đèn có thể bật để báo camera đang trong phiên xác thực.
-    digitalWrite(FLASH_LED_PIN, HIGH);
+    Serial.println("[CAMERA] Capturing...");
     sendFrameRaw();
-  } else {
-    digitalWrite(FLASH_LED_PIN, LOW);
-    delay(20);
   }
+
+  delay(20);
 }

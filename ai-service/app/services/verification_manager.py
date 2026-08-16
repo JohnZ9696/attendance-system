@@ -117,6 +117,30 @@ def is_camera_capture_active(camera_id: str) -> bool:
         return True
 
 
+camera_last_seen_ms: dict[str, int] = {}
+camera_last_seen_lock = threading.Lock()
+
+
+def mark_camera_online(camera_id: str) -> None:
+    with camera_last_seen_lock:
+        camera_last_seen_ms[camera_id] = int(time.time() * 1000)
+
+
+def is_camera_online(
+    camera_id: str,
+    timeout_ms: int = 3_000,
+) -> bool:
+    now_ms = int(time.time() * 1000)
+
+    with camera_last_seen_lock:
+        last_seen = camera_last_seen_ms.get(camera_id)
+
+    if last_seen is None:
+        return False
+
+    return now_ms - last_seen <= timeout_ms
+
+
 def get_buffer(camera_id: str) -> FrameBuffer:
     with registry_lock:
         if camera_id not in camera_buffers:
