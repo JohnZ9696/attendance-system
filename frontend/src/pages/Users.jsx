@@ -5,7 +5,7 @@ import { Button, ErrorBanner, PageHeader, Panel } from '../components/ui';
 import { SkeletonTable } from '../components/Skeleton';
 import { useToast } from '../components/useToast.js';
 
-const emptyForm = { name: '', mssv: '', rfidUid: '', is_active: true };
+const emptyForm = { name: '', mssv: '', rfidUid: '', is_active: true, parentPhone: '', parentEmail: '' };
 const statusLabels = { ON_TIME: 'Đúng giờ', LATE: 'Đi muộn' };
 const statusBadge = { ON_TIME: 'badge-success', LATE: 'badge-warning' };
 
@@ -128,7 +128,7 @@ export default function Users() {
   const openEdit = (user) => {
     if (!isLeadProctor) return;
     setEditingId(user.id);
-    setForm({ name: user.name || '', mssv: user.mssv || '', rfidUid: user.rfidUid || '', is_active: user.is_active ?? true });
+    setForm({ name: user.name || '', mssv: user.mssv || '', rfidUid: user.rfidUid || '', is_active: user.is_active ?? true, parentPhone: user.parentPhone || '', parentEmail: user.parentEmail || '' });
     setShowForm(true);
   };
 
@@ -258,6 +258,10 @@ export default function Users() {
                 <label><span>Họ và tên *</span><input className="input" required autoFocus value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} /></label>
                 <label><span>MSSV *</span><input className="input" required value={form.mssv} onChange={(event) => setForm({ ...form, mssv: event.target.value })} /></label>
                 <label className="form-wide"><span>Mã RFID từ ESP32</span><input className="input" readOnly value={form.rfidUid} /></label>
+                <div className="form-wide flex gap-4">
+                  <label className="flex-1"><span>SĐT phụ huynh</span><input className="input" value={form.parentPhone} onChange={(event) => setForm({ ...form, parentPhone: event.target.value })} /></label>
+                  <label className="flex-1"><span>Email phụ huynh</span><input className="input" type="email" value={form.parentEmail} onChange={(event) => setForm({ ...form, parentEmail: event.target.value })} /></label>
+                </div>
                 <div className="form-actions form-wide"><Button type="button" onClick={closeEnrollment}>Hủy</Button><Button variant="primary" type="submit" disabled={saving}>{saving ? 'Đang lưu...' : 'Tạo người dùng'}</Button></div>
               </form>
             )}
@@ -272,6 +276,10 @@ export default function Users() {
             <label><span>Họ và tên *</span><input className="input" required value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} /></label>
             <label><span>MSSV *</span><input className="input" required value={form.mssv} onChange={(event) => setForm({ ...form, mssv: event.target.value })} /></label>
             <label><span>Mã RFID *</span><input className="input" required value={form.rfidUid} onChange={(event) => setForm({ ...form, rfidUid: event.target.value })} /></label>
+            <div className="form-wide flex gap-4">
+              <label className="flex-1"><span>SĐT phụ huynh</span><input className="input" value={form.parentPhone} onChange={(event) => setForm({ ...form, parentPhone: event.target.value })} /></label>
+              <label className="flex-1"><span>Email phụ huynh</span><input className="input" type="email" value={form.parentEmail} onChange={(event) => setForm({ ...form, parentEmail: event.target.value })} /></label>
+            </div>
             <label>
                <span>Hoạt động</span>
                <select className="input" value={form.is_active} onChange={(e) => setForm({...form, is_active: e.target.value === 'true'})}>
@@ -291,6 +299,9 @@ export default function Users() {
               <div>
                 <h2 id="detail-title">{selectedUser.name}</h2>
                 <p>MSSV {selectedUser.mssv}{selectedUser.rfidUid ? ` · RFID ${selectedUser.rfidUid}` : ''} {!selectedUser.is_active && <span className="badge badge-warning">Không hoạt động</span>}</p>
+                {(selectedUser.parentPhone || selectedUser.parentEmail) && (
+                  <p className="text-muted text-sm">Phụ huynh: {selectedUser.parentPhone ? `SĐT ${selectedUser.parentPhone}` : ''}{selectedUser.parentPhone && selectedUser.parentEmail ? ' · ' : ''}{selectedUser.parentEmail || ''}</p>
+                )}
               </div>
               <button className="icon-btn" onClick={closeDetail} aria-label="Đóng"><X size={18} /></button>
             </div>

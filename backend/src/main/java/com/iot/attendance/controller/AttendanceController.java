@@ -27,11 +27,14 @@ public class AttendanceController {
     @GetMapping
     public ResponseEntity<List<AttendanceResponse>> getAll(
             @RequestParam(required = false) String studentId,
+            @RequestParam(required = false) String date,
             @RequestParam(required = false) String from,
             @RequestParam(required = false) String to
     ) {
         List<AttendanceLog> logs;
-        if (studentId != null) {
+        if (date != null) {
+            logs = repository.findByAttendanceDateOrderByCheckTimeDesc(LocalDate.parse(date));
+        } else if (studentId != null) {
             logs = repository.findByStudentIdOrderByCheckTimeDesc(java.util.UUID.fromString(studentId));
         } else if (from != null && to != null) {
             logs = repository.findByAttendanceDateBetweenOrderByCheckTimeDesc(

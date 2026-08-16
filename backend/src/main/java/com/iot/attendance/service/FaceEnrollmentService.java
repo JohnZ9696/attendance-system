@@ -38,7 +38,17 @@ public class FaceEnrollmentService {
         if (image.isEmpty() || image.getSize() > MAX_IMAGE_BYTES) {
             throw new IllegalArgumentException("IMAGE_EMPTY_OR_TOO_LARGE");
         }
-        if (!ACCEPTED_TYPES.contains(image.getContentType())) {
+
+        String contentType = image.getContentType();
+        if (contentType == null || contentType.isBlank()) {
+            String filename = image.getOriginalFilename() == null ? "" : image.getOriginalFilename().toLowerCase();
+            if (filename.endsWith(".png")) {
+                contentType = "image/png";
+            } else if (filename.endsWith(".jpg") || filename.endsWith(".jpeg")) {
+                contentType = "image/jpeg";
+            }
+        }
+        if (!ACCEPTED_TYPES.contains(contentType)) {
             throw new IllegalArgumentException("ONLY_JPEG_OR_PNG_ALLOWED");
         }
 

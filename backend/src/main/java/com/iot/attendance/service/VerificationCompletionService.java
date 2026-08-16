@@ -9,23 +9,30 @@ import java.math.BigDecimal;
 import java.time.OffsetDateTime;
 import java.util.Map;
 import java.util.UUID;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 @Service
 public class VerificationCompletionService {
 
+    private static final Logger LOGGER = LoggerFactory.getLogger(VerificationCompletionService.class);
+
     private final VerificationLogRepository verificationLogRepository;
     private final AttendanceService attendanceService;
     private final SseEventService sseEventService;
+    private final ParentNotificationService parentNotificationService;
 
     public VerificationCompletionService(
             VerificationLogRepository verificationLogRepository,
             AttendanceService attendanceService,
-            SseEventService sseEventService
+            SseEventService sseEventService,
+            ParentNotificationService parentNotificationService
     ) {
         this.verificationLogRepository = verificationLogRepository;
         this.attendanceService = attendanceService;
         this.sseEventService = sseEventService;
+        this.parentNotificationService = parentNotificationService;
     }
 
     @Transactional
@@ -67,6 +74,12 @@ public class VerificationCompletionService {
                         "lateMinutes", attendanceLog.getLateMinutes(),
                         "checkTime", attendanceLog.getCheckTime().toString()
                 ));
+                // Notify parents
+                try {
+                    parentNotificationService.notifyCheckIn(log.getStudent(), attendanceLog, log);
+                } catch (RuntimeException notificationException) {
+                    LOGGER.error("Parent notification failed for verification {}", verificationId, notificationException);
+                }
             } catch (RuntimeException exception) {
                 if (!"ALREADY_CHECKED_IN".equals(exception.getMessage())) {
                     throw exception;
