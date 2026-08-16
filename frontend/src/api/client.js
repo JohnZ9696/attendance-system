@@ -1,25 +1,12 @@
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080/api/v1';
 
 async function request(path, options = {}) {
-  const token = localStorage.getItem('token');
   const headers = {
     'Content-Type': 'application/json',
     ...options.headers,
   };
 
-  if (token) {
-    headers['Authorization'] = `Bearer ${token}`;
-  }
-
   const response = await fetch(`${API_BASE_URL}${path}`, { ...options, headers });
-  
-  if (response.status === 401) {
-    localStorage.removeItem('token');
-    localStorage.removeItem('role');
-    localStorage.removeItem('user');
-    window.location.href = '/login';
-    throw new Error('Unauthorized');
-  }
 
   if (!response.ok) {
     const message = await response.text();
@@ -28,7 +15,6 @@ async function request(path, options = {}) {
 
   if (response.status === 204) return null;
   
-  // if content is excel, we handle it differently (blob)
   const contentType = response.headers.get('content-type');
   if (contentType && contentType.includes('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')) {
     return response.blob();
@@ -38,10 +24,6 @@ async function request(path, options = {}) {
 }
 
 export const apiClient = {
-  login: (credentials) => request('/auth/login', {
-    method: 'POST',
-    body: JSON.stringify(credentials),
-  }),
   getUsers: () => request('/users'),
   createUser: (user) => request('/users', {
     method: 'POST',
@@ -57,9 +39,6 @@ export const apiClient = {
     formData.append('image', file);
     return fetch(`${API_BASE_URL}/users/${id}/face`, {
       method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${localStorage.getItem('token')}`
-      },
       body: formData,
     }).then(async res => {
       if (!res.ok) {

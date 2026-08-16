@@ -1,12 +1,22 @@
 package com.iot.attendance.controller;
 
+import com.iot.attendance.dto.StudentRequest;
 import com.iot.attendance.dto.StudentResponse;
 import com.iot.attendance.entity.Student;
 import com.iot.attendance.repository.StudentRepository;
 import com.iot.attendance.service.FaceEnrollmentService;
 import java.util.UUID;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.*;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestPart;
+import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
 @RestController
@@ -16,10 +26,7 @@ public class UserController {
     private final StudentRepository repository;
     private final FaceEnrollmentService faceEnrollmentService;
 
-    public UserController(
-            StudentRepository repository,
-            FaceEnrollmentService faceEnrollmentService
-    ) {
+    public UserController(StudentRepository repository, FaceEnrollmentService faceEnrollmentService) {
         this.repository = repository;
         this.faceEnrollmentService = faceEnrollmentService;
     }
@@ -34,22 +41,34 @@ public class UserController {
     }
 
     @PostMapping
-    public ResponseEntity<?> create(@RequestBody Student student) {
-        student.setId(null);
+    public ResponseEntity<?> create(@RequestBody StudentRequest request) {
+        Student student = new Student();
+        student.setFullName(request.name());
+        student.setMssv(request.mssv());
+        if (request.rfidUid() != null) student.setUid(normalizeUid(request.rfidUid()));
+        student.setParentPhone(request.parentPhone());
+        student.setParentEmail(request.parentEmail());
+        student.setIsActive(request.isActive() == null || request.isActive());
         Student saved = repository.save(student);
         return ResponseEntity.ok(StudentResponse.from(saved));
     }
 
     @PatchMapping("/{id}")
-    public ResponseEntity<?> update(@PathVariable UUID id, @RequestBody Student update) {
+    public ResponseEntity<?> update(@PathVariable UUID id, @RequestBody StudentRequest update) {
         return repository.findById(id).map(student -> {
-            student.setFullName(update.getFullName());
-            student.setMssv(update.getMssv());
-            student.setUid(update.getUid());
-            student.setIsActive(update.getIsActive());
+            if (update.name() != null) student.setFullName(update.name());
+            if (update.mssv() != null) student.setMssv(update.mssv());
+            if (update.rfidUid() != null) student.setUid(normalizeUid(update.rfidUid()));
+            if (update.parentPhone() != null) student.setParentPhone(update.parentPhone());
+            if (update.parentEmail() != null) student.setParentEmail(update.parentEmail());
+            if (update.isActive() != null) student.setIsActive(update.isActive());
             Student saved = repository.save(student);
             return ResponseEntity.ok(StudentResponse.from(saved));
         }).orElse(ResponseEntity.notFound().build());
+    }
+
+    private static String normalizeUid(String uid) {
+        return uid.toUpperCase().replaceAll("[\\s:]", "");
     }
 
     @DeleteMapping("/{id}")
@@ -63,7 +82,7 @@ public class UserController {
 
     @PostMapping(
             value = "/{id}/face",
-            consumes = org.springframework.http.MediaType.MULTIPART_FORM_DATA_VALUE
+            consumes = MediaType.MULTIPART_FORM_DATA_VALUE
     )
     public ResponseEntity<?> updateFace(
             @PathVariable UUID id,

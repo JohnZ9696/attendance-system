@@ -3,7 +3,6 @@ import { CalendarOff, ChevronLeft, ChevronRight, Save, X } from 'lucide-react';
 import { apiClient } from '../api/client';
 import { Skeleton } from '../components/Skeleton';
 import { useToast } from '../components/useToast.js';
-import { useAuth } from '../contexts/AuthContext';
 
 const WEEKDAY_LABELS = ['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN'];
 const WEEKDAY_INDEX = [1, 2, 3, 4, 5, 6, 0];
@@ -11,7 +10,6 @@ const WEEKDAY_INDEX = [1, 2, 3, 4, 5, 6, 0];
 const dateKey = (date) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
 
 export default function Settings() {
-  const { role } = useAuth();
   const [cutoffTime, setCutoffTime] = useState('07:30:00');
   const [similarityThreshold, setSimilarityThreshold] = useState(60);
   const [dayOffs, setDayOffs] = useState([]);
@@ -22,7 +20,7 @@ export default function Settings() {
   const [message, setMessage] = useState('');
   const toast = useToast();
 
-  const isLeadProctor = role === 'LEAD_PROCTOR';
+  const isLeadProctor = true;
 
   const loadSettings = async () => {
     setLoading(true);

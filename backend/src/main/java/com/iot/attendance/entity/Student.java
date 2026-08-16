@@ -38,6 +38,12 @@ public class Student {
     @Column(name = "face_embedding", columnDefinition = "jsonb")
     private String faceEmbedding;
 
+    @Column(name = "parent_phone")
+    private String parentPhone;
+
+    @Column(name = "parent_email")
+    private String parentEmail;
+
     @Column(name = "is_active", nullable = false)
     private Boolean isActive = true;
 

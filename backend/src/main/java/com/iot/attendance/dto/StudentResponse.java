@@ -12,6 +12,8 @@ public record StudentResponse(
         String rfidUid,
         @JsonProperty("is_active") Boolean isActive,
         boolean faceRegistered,
+        String parentPhone,
+        String parentEmail,
         OffsetDateTime createdAt
 ) {
     public static StudentResponse from(Student student) {
@@ -25,6 +27,8 @@ public record StudentResponse(
                 student.getUid(),
                 student.getIsActive(),
                 registered,
+                student.getParentPhone(),
+                student.getParentEmail(),
                 student.getCreatedAt()
         );
     }

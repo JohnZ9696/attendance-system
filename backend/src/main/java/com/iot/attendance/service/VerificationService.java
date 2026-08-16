@@ -24,4 +24,9 @@ public class VerificationService {
         log.setStartedAt(OffsetDateTime.now());
         return repository.save(log);
     }
+
+    public VerificationLog updateVerification(VerificationLog log) {
+        log.setCompletedAt(OffsetDateTime.now());
+        return repository.save(log);
+    }
 }

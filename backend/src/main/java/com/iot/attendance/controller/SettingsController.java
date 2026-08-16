@@ -1,27 +1,25 @@
 package com.iot.attendance.controller;
 
-import com.iot.attendance.dto.AttendanceSettings;
-import com.iot.attendance.service.SystemSettingsService;
+import com.iot.attendance.service.SettingsService;
+import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/v1/settings")
+@RequiredArgsConstructor
 public class SettingsController {
 
-    private final SystemSettingsService service;
-
-    public SettingsController(SystemSettingsService service) {
-        this.service = service;
-    }
+    private final SettingsService service;
 
     @GetMapping
-    public ResponseEntity<AttendanceSettings> getSettings() {
-        return ResponseEntity.ok(service.getAttendanceSettings());
+    public ResponseEntity<?> getSettings() {
+        return ResponseEntity.ok(service.getAllSettings());
     }
 
     @PatchMapping
-    public ResponseEntity<AttendanceSettings> updateSettings(@RequestBody AttendanceSettings payload) {
-        return ResponseEntity.ok(service.updateAttendanceSettings(payload));
+    public ResponseEntity<Map<String, Object>> updateSettings(@RequestBody Map<String, Object> payload) {
+        return ResponseEntity.ok(service.updateSettings(payload));
     }
 }

@@ -14,6 +14,8 @@ create table if not exists students (
   face_embedding      jsonb,
   face_model          text,
   embedding_dimension integer,
+  parent_phone        text,
+  parent_email        text,
   is_active           boolean not null default true,
   created_at          timestamptz not null default now(),
   updated_at          timestamptz not null default now()

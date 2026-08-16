@@ -11,7 +11,6 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.time.LocalDate;
-import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -45,7 +44,7 @@ public class AttendanceController {
 
     @GetMapping("/today")
     public ResponseEntity<List<AttendanceResponse>> getToday() {
-        LocalDate today = LocalDate.now();
+        LocalDate today = LocalDate.now(java.time.ZoneId.of("Asia/Ho_Chi_Minh"));
         List<AttendanceLog> logs = repository.findByAttendanceDateOrderByCheckTimeDesc(today);
         return ResponseEntity.ok(logs.stream().map(AttendanceResponse::from).collect(Collectors.toList()));
     }
