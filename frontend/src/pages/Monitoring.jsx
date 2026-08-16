@@ -1,9 +1,73 @@
-import React, { useMemo } from 'react';
+import React, {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import { Camera, Wifi, CheckCircle, AlertCircle } from 'lucide-react';
 import { useSSE } from '../hooks/useSSE';
+import { useToast } from '../components/useToast.js';
 
 export default function Monitoring() {
   const { events, connected } = useSSE('/monitor/events');
+
+  const toast = useToast();
+  const notifiedEventRef = useRef(null);
+  const [previewVersion, setPreviewVersion] = useState(Date.now());
+  const [cameraOnline, setCameraOnline] = useState(false);
+
+  const aiBaseUrl =
+    import.meta.env.VITE_AI_BASE_URL ||
+    'http://localhost:8000';
+
+  const previewUrl =
+    `${aiBaseUrl}/internal/v1/cameras/cam-01/preview.jpg` +
+    `?t=${previewVersion}`;
+
+  useEffect(() => {
+    const intervalId = window.setInterval(() => {
+      setPreviewVersion(Date.now());
+    }, 800);
+
+    return () => window.clearInterval(intervalId);
+  }, []);
+
+  useEffect(() => {
+    const latest = events[0];
+
+    if (!latest || latest.id === notifiedEventRef.current) {
+      return;
+    }
+
+    notifiedEventRef.current = latest.id;
+
+    if (latest.type === 'verification_update') {
+      if (latest.data.result === 'VERIFIED') {
+        toast(
+          `Xác thực thành công: ${latest.data.studentName}`,
+          'success'
+        );
+      } else {
+        toast(
+          `Xác thực thất bại: ${
+            latest.data.failureReason || latest.data.result
+          }`,
+          'error'
+        );
+      }
+    }
+
+    if (latest.type === 'attendance_event') {
+      const status = latest.data.status === 'LATE'
+        ? `Đi muộn ${latest.data.lateMinutes || 0} phút`
+        : 'Đúng giờ';
+
+      toast(
+        `Điểm danh thành công: ${latest.data.studentName} - ${status}`,
+        'success'
+      );
+    }
+  }, [events, toast]);
 
   const logs = useMemo(() => {
     return events.map((e, idx) => {
@@ -16,9 +80,11 @@ export default function Monitoring() {
         label = 'SUCCESS';
         message = `Điểm danh: ${e.data.studentName} (${e.data.studentId}) - ${e.data.status === 'LATE' ? `Muộn ${e.data.lateMinutes}p` : 'Đúng giờ'}`;
       } else if (e.type === 'verification_update') {
-        color = e.data.result === 'SUCCESS' ? 'var(--status-success)' : 'var(--status-warning)';
+        color = e.data.result === 'VERIFIED' ? 'var(--status-success)' : 'var(--status-warning)';
         label = e.data.result;
-        message = `Xác thực khuôn mặt: ${e.data.result} (${(e.data.similarityPercent || 0).toFixed(1)}%)`;
+        message = e.data.result === 'VERIFIED'
+          ? `Xác thực thành công (${(e.data.similarityPercent || 0).toFixed(1)}%)`
+          : `Xác thực thất bại: ${e.data.failureReason || e.data.result}`;
       } else if (e.type === 'device_status') {
         color = e.data.status === 'ONLINE' ? 'var(--status-success)' : 'var(--status-error)';
         label = e.data.status;
@@ -64,6 +130,47 @@ export default function Monitoring() {
       </div>
 
       <div className="grid-content">
+        {/* Camera Live Preview */}
+        <div className="card col-span-2 flex-col">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="flex items-center gap-2">
+              <Camera size={20} />
+              Camera trực tiếp
+            </h3>
+
+            <span
+              className={`badge ${
+                cameraOnline ? 'badge-success' : 'badge-warning'
+              }`}
+            >
+              {cameraOnline ? 'ONLINE' : 'OFFLINE'}
+            </span>
+          </div>
+
+          <div
+            style={{
+              minHeight: '360px',
+              display: 'grid',
+              placeItems: 'center',
+              background: '#111827',
+              borderRadius: '10px',
+              overflow: 'hidden',
+            }}
+          >
+            <img
+              src={previewUrl}
+              alt="ESP32-CAM live preview"
+              onLoad={() => setCameraOnline(true)}
+              onError={() => setCameraOnline(false)}
+              style={{
+                width: '100%',
+                maxHeight: '520px',
+                objectFit: 'contain',
+              }}
+            />
+          </div>
+        </div>
+
         {/* Verification / Log View */}
         <div className="card col-span-2 flex-col">
           <div className="flex items-center justify-between mb-4">
@@ -106,10 +213,10 @@ export default function Monitoring() {
                   <Camera size={20} className="text-muted" />
                   <div>
                     <p style={{ fontWeight: 500 }}>ESP32-CAM</p>
-                    <p className="text-sm text-muted">Trạng thái: {deviceStatuses['ESP32_CAM'].status}</p>
+                    <p className="text-sm text-muted">Trạng thái: {cameraOnline ? 'ONLINE' : 'OFFLINE'}</p>
                   </div>
                 </div>
-                {deviceStatuses['ESP32_CAM'].status === 'ONLINE' ? 
+                {cameraOnline ? 
                   <CheckCircle size={20} style={{ color: 'var(--status-success)' }} /> :
                   <AlertCircle size={20} style={{ color: 'var(--status-warning)' }} />
                 }

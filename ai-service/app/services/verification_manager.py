@@ -66,10 +66,55 @@ class FrameBuffer:
                 and now_ms - packet.received_at_ms <= self._max_age_ms
             ]
 
+    def latest_frame(self, max_age_ms: int = 3_000) -> np.ndarray | None:
+        now_ms = int(time.time() * 1000)
+
+        with self._lock:
+            if not self._frames:
+                return None
+
+            packet = self._frames[-1]
+
+            if now_ms - packet.received_at_ms > max_age_ms:
+                return None
+
+            return packet.frame.copy()
+
 
 camera_buffers: dict[str, FrameBuffer] = {}
 camera_locks: dict[str, asyncio.Lock] = {}
 registry_lock = threading.Lock()
+
+camera_capture_deadlines: dict[str, int] = {}
+camera_capture_lock = threading.Lock()
+
+
+def start_camera_capture(camera_id: str, duration_ms: int) -> None:
+    deadline = int(time.time() * 1000) + duration_ms
+
+    with camera_capture_lock:
+        camera_capture_deadlines[camera_id] = deadline
+
+
+def stop_camera_capture(camera_id: str) -> None:
+    with camera_capture_lock:
+        camera_capture_deadlines.pop(camera_id, None)
+
+
+def is_camera_capture_active(camera_id: str) -> bool:
+    now_ms = int(time.time() * 1000)
+
+    with camera_capture_lock:
+        deadline = camera_capture_deadlines.get(camera_id)
+
+        if deadline is None:
+            return False
+
+        if now_ms > deadline:
+            camera_capture_deadlines.pop(camera_id, None)
+            return False
+
+        return True
 
 
 def get_buffer(camera_id: str) -> FrameBuffer:

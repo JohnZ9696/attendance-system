@@ -56,10 +56,13 @@ public class VerificationCompletionService {
         // Publish verification_update event
         sseEventService.publishEvent("verification_update", Map.of(
                 "verificationId", verificationId.toString(),
+                "studentId", log.getStudent().getId().toString(),
+                "studentName", log.getStudent().getFullName(),
                 "result", response.result().name(),
                 "similarityPercent", response.similarityPercent(),
                 "livenessPassed", response.livenessPassed(),
-                "failureReason", response.failureReason()
+                "failureReason", response.failureReason(),
+                "completedAt", log.getCompletedAt().toString()
         ));
 
         if (response.result() == VerificationResult.VERIFIED) {
@@ -99,7 +102,11 @@ public class VerificationCompletionService {
 
                 sseEventService.publishEvent("verification_update", Map.of(
                         "verificationId", verificationId.toString(),
+                        "studentId", log.getStudent().getId().toString(),
+                        "studentName", log.getStudent().getFullName(),
                         "result", "ERROR",
+                        "similarityPercent", 0.0,
+                        "livenessPassed", false,
                         "failureReason", reason
                 ));
             }

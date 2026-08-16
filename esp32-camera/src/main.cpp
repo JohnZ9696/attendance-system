@@ -16,6 +16,7 @@ const char* CAMERA_ID = "cam-01";
 constexpr int FLASH_LED_PIN = 4;
 constexpr unsigned long FRAME_INTERVAL_MS = 250;
 constexpr unsigned long BLINK_INTERVAL_MS = 250;
+constexpr unsigned long COMMAND_POLL_INTERVAL_MS = 500;
 
 // ============================================================================
 // Camera Pins (AI-Thinker)
@@ -42,7 +43,9 @@ constexpr unsigned long BLINK_INTERVAL_MS = 250;
 // ============================================================================
 unsigned long lastFrameMs = 0;
 unsigned long lastBlinkMs = 0;
+unsigned long lastCommandPollMs = 0;
 bool ledState = false;
+bool captureRequested = false;
 
 
 // ============================================================================
@@ -122,6 +125,61 @@ String getIsoTimestamp() {
   char buf[32];
   strftime(buf, sizeof(buf), "%Y-%m-%dT%H:%M:%SZ", &timeinfo);
   return String(buf);
+}
+
+// ============================================================================
+// Capture Command Polling
+// ============================================================================
+void pollCaptureCommand() {
+  if (millis() - lastCommandPollMs < COMMAND_POLL_INTERVAL_MS) {
+    return;
+  }
+
+  lastCommandPollMs = millis();
+
+  if (WiFi.status() != WL_CONNECTED) {
+    captureRequested = false;
+    return;
+  }
+
+  HTTPClient http;
+  String url = String(API_URL) + CAMERA_ID + "/capture-command";
+
+  http.begin(url);
+  http.addHeader("INTERNAL-API-KEY", INTERNAL_API_KEY);
+  http.setTimeout(2000);
+
+  int code = http.GET();
+
+  if (code == HTTP_CODE_OK) {
+    String response = http.getString();
+
+    bool newCaptureRequested =
+        response.indexOf("\"active\":true") >= 0;
+
+    if (newCaptureRequested != captureRequested) {
+      captureRequested = newCaptureRequested;
+
+      Serial.println(
+          captureRequested
+              ? "Capture session started"
+              : "Capture session stopped"
+      );
+    }
+  } else {
+    captureRequested = false;
+
+    if (code < 0) {
+      Serial.printf(
+          "Capture command failed: %s\n",
+          http.errorToString(code).c_str()
+      );
+    } else {
+      Serial.printf("Capture command HTTP %d\n", code);
+    }
+  }
+
+  http.end();
 }
 
 // ============================================================================
@@ -223,5 +281,14 @@ void loop() {
     digitalWrite(FLASH_LED_PIN, LOW);
   }
 
-  sendFrameRaw();
+  pollCaptureCommand();
+
+  if (captureRequested) {
+    // Đèn có thể bật để báo camera đang trong phiên xác thực.
+    digitalWrite(FLASH_LED_PIN, HIGH);
+    sendFrameRaw();
+  } else {
+    digitalWrite(FLASH_LED_PIN, LOW);
+    delay(20);
+  }
 }

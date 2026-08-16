@@ -1,29 +1,36 @@
 package com.iot.attendance.dto;
 
+import com.iot.attendance.entity.AttendanceLog;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.util.UUID;
 
 public record AttendanceResponse(
         UUID id,
-        UUID studentId,
-        String studentName,
-        String studentMssv,
         LocalDate attendanceDate,
         OffsetDateTime checkInTime,
         String status,
-        Integer lateMinutes
+        Integer lateMinutes,
+        UserSummary user
 ) {
-    public static AttendanceResponse from(com.iot.attendance.entity.AttendanceLog log) {
+    public record UserSummary(
+            UUID id,
+            String mssv,
+            String name
+    ) {}
+
+    public static AttendanceResponse from(AttendanceLog log) {
         return new AttendanceResponse(
                 log.getId(),
-                log.getStudent().getId(),
-                log.getStudent().getFullName(),
-                log.getStudent().getMssv(),
                 log.getAttendanceDate(),
                 log.getCheckTime(),
                 log.getStatus(),
-                log.getLateMinutes()
+                log.getLateMinutes(),
+                new UserSummary(
+                        log.getStudent().getId(),
+                        log.getStudent().getMssv(),
+                        log.getStudent().getFullName()
+                )
         );
     }
 }

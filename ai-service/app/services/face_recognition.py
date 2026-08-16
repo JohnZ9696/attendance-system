@@ -48,7 +48,7 @@ def extract_face_embedding(
         results = DeepFace.represent(
             img_path=frame,
             model_name=MODEL_NAME,
-            detector_backend="opencv",
+            detector_backend="retinaface",
             enforce_detection=True,
             align=True,
             normalization="Facenet",

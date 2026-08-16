@@ -4,6 +4,7 @@ import { apiClient } from '../api/client';
 import { Button, ErrorBanner, PageHeader, Panel } from '../components/ui';
 import { SkeletonTable } from '../components/Skeleton';
 import { useToast } from '../components/useToast.js';
+import { useSSE } from '../hooks/useSSE';
 
 const PAGE_SIZE = 20;
 
@@ -28,6 +29,7 @@ export default function History() {
   const [error, setError] = useState('');
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
   const toast = useToast();
+  const { events } = useSSE('/monitor/events');
 
   const loadRecords = async (date, silent = false) => {
     if (!silent) setLoading(true);
@@ -45,6 +47,25 @@ export default function History() {
     setVisibleCount(PAGE_SIZE);
     loadRecords(filters.date);
   }, [filters.date]);
+
+  useEffect(() => {
+    const latestAttendanceEvent = events.find(
+      (event) => event.type === 'attendance_event'
+    );
+
+    if (!latestAttendanceEvent) {
+      return;
+    }
+
+    loadRecords(filters.date, true);
+
+    toast(
+      `Đã cập nhật điểm danh: ${
+        latestAttendanceEvent.data.studentName
+      }`,
+      'success'
+    );
+  }, [events, filters.date]);
 
   const keyword = filters.keyword.trim().toLowerCase();
   const filtered = [...records]

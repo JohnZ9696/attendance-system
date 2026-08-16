@@ -4,6 +4,7 @@ import com.iot.attendance.dto.AttendanceResponse;
 import com.iot.attendance.dto.AttendanceStats;
 import com.iot.attendance.entity.AttendanceLog;
 import com.iot.attendance.repository.AttendanceLogRepository;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -11,8 +12,9 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.List;
-import java.util.stream.Collectors;
+import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/v1/attendance")
@@ -26,30 +28,49 @@ public class AttendanceController {
 
     @GetMapping
     public ResponseEntity<List<AttendanceResponse>> getAll(
-            @RequestParam(required = false) String studentId,
-            @RequestParam(required = false) String date,
-            @RequestParam(required = false) String from,
-            @RequestParam(required = false) String to
+            @RequestParam(required = false)
+            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
+            LocalDate date,
+
+            @RequestParam(required = false)
+            UUID studentId
     ) {
         List<AttendanceLog> logs;
-        if (date != null) {
-            logs = repository.findByAttendanceDateOrderByCheckTimeDesc(LocalDate.parse(date));
+
+        if (date != null && studentId != null) {
+            logs = repository
+                    .findAllByStudentIdAndAttendanceDateOrderByCheckTimeDesc(
+                            studentId,
+                            date
+                    );
+        } else if (date != null) {
+            logs = repository
+                    .findAllByAttendanceDateOrderByCheckTimeDesc(date);
         } else if (studentId != null) {
-            logs = repository.findByStudentIdOrderByCheckTimeDesc(java.util.UUID.fromString(studentId));
-        } else if (from != null && to != null) {
-            logs = repository.findByAttendanceDateBetweenOrderByCheckTimeDesc(
-                    LocalDate.parse(from), LocalDate.parse(to));
+            logs = repository
+                    .findAllByStudentIdOrderByCheckTimeDesc(studentId);
         } else {
             logs = repository.findAllByOrderByCheckTimeDesc();
         }
-        return ResponseEntity.ok(logs.stream().map(AttendanceResponse::from).collect(Collectors.toList()));
+
+        return ResponseEntity.ok(
+                logs.stream()
+                        .map(AttendanceResponse::from)
+                        .toList()
+        );
     }
 
     @GetMapping("/today")
     public ResponseEntity<List<AttendanceResponse>> getToday() {
-        LocalDate today = LocalDate.now(java.time.ZoneId.of("Asia/Ho_Chi_Minh"));
-        List<AttendanceLog> logs = repository.findByAttendanceDateOrderByCheckTimeDesc(today);
-        return ResponseEntity.ok(logs.stream().map(AttendanceResponse::from).collect(Collectors.toList()));
+        List<AttendanceResponse> result = repository
+                .findAllByAttendanceDateOrderByCheckTimeDesc(
+                        LocalDate.now(ZoneId.of("Asia/Ho_Chi_Minh"))
+                )
+                .stream()
+                .map(AttendanceResponse::from)
+                .toList();
+
+        return ResponseEntity.ok(result);
     }
 
     @GetMapping("/stats")

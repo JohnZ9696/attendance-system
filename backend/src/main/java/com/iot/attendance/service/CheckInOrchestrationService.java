@@ -18,7 +18,12 @@ public class CheckInOrchestrationService {
     public void handleRfidScan(String deviceId, String rfidUid) {
         String normalizedUid = rfidUid.toUpperCase().replaceAll("[:\\s]", "");
         Student student = studentRepository.findByUidAndIsActiveTrue(normalizedUid)
-                .orElseThrow(() -> new RuntimeException("Student not found or inactive"));
+                .orElseThrow(() -> new IllegalArgumentException("STUDENT_NOT_FOUND_OR_INACTIVE"));
+
+        if (student.getFaceEmbedding() == null
+                || student.getFaceEmbedding().isBlank()) {
+            throw new IllegalStateException("FACE_NOT_ENROLLED");
+        }
 
         VerificationLog log = verificationService.createPendingVerification(student, normalizedUid);
         fastApiClient.requestFaceVerification(log.getId(), student.getId(), deviceId)

@@ -43,7 +43,7 @@ async def create_embedding(
     result = await asyncio.to_thread(
         extract_face_embedding,
         frame,
-        True,
+        False,
     )
 
     if result.error:

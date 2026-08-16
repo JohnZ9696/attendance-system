@@ -17,4 +17,10 @@ public interface AttendanceLogRepository extends JpaRepository<AttendanceLog, UU
     List<AttendanceLog> findByAttendanceDateBetweenOrderByCheckTimeDesc(LocalDate from, LocalDate to);
 
     List<AttendanceLog> findAllByOrderByCheckTimeDesc();
+
+    List<AttendanceLog> findAllByAttendanceDateOrderByCheckTimeDesc(LocalDate attendanceDate);
+
+    List<AttendanceLog> findAllByStudentIdOrderByCheckTimeDesc(UUID studentId);
+
+    List<AttendanceLog> findAllByStudentIdAndAttendanceDateOrderByCheckTimeDesc(UUID studentId, LocalDate attendanceDate);
 }

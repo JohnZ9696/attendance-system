@@ -1,50 +1,76 @@
-import { useState, useEffect } from 'react';
+import { useEffect, useState } from 'react';
 
 export function useSSE(endpoint) {
   const [events, setEvents] = useState([]);
   const [connected, setConnected] = useState(false);
 
   useEffect(() => {
-    const token = localStorage.getItem('token');
-    if (!token) return;
-
     let eventSource;
     let reconnectTimer;
 
+    const eventTypes = [
+      'connected',
+      'rfid_scan',
+      'device_status',
+      'verification_update',
+      'attendance_event',
+      'incident',
+    ];
+
+    const pushEvent = (type) => (event) => {
+      try {
+        const data = JSON.parse(event.data);
+
+        setEvents((previous) => [
+          {
+            id: `${Date.now()}-${Math.random()}`,
+            type,
+            data,
+            timestamp: new Date(),
+          },
+          ...previous,
+        ].slice(0, 50));
+      } catch (error) {
+        console.error('Không thể đọc sự kiện SSE:', error, event.data);
+      }
+    };
+
     const connect = () => {
-      const url = `${import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080/api/v1'}${endpoint}?token=${token}`;
-      eventSource = new EventSource(url);
+      const token = localStorage.getItem('token');
+      const baseUrl =
+        import.meta.env.VITE_API_BASE_URL ||
+        'http://localhost:8080/api/v1';
+
+      // Khi đang bỏ qua đăng nhập, token có thể không tồn tại.
+      const query = token
+        ? `?token=${encodeURIComponent(token)}`
+        : '';
+
+      eventSource = new EventSource(
+        `${baseUrl}${endpoint}${query}`
+      );
 
       eventSource.onopen = () => {
         setConnected(true);
       };
 
-      eventSource.onmessage = (event) => {
-        try {
-          const parsed = JSON.parse(event.data);
-          // add timestamp for display
-          parsed.timestamp = new Date();
-          setEvents(prev => [parsed, ...prev].slice(0, 50)); // keep last 50 events
-        } catch (e) {
-          console.error("Error parsing SSE data", e);
-        }
-      };
+      eventTypes.forEach((type) => {
+        eventSource.addEventListener(type, pushEvent(type));
+      });
 
-      eventSource.onerror = (err) => {
-        console.error("SSE Error", err);
+      eventSource.onerror = (error) => {
+        console.error('SSE connection error:', error);
         setConnected(false);
         eventSource.close();
-        reconnectTimer = setTimeout(connect, 5000);
+        reconnectTimer = window.setTimeout(connect, 3000);
       };
     };
 
     connect();
 
     return () => {
-      clearTimeout(reconnectTimer);
-      if (eventSource) {
-        eventSource.close();
-      }
+      window.clearTimeout(reconnectTimer);
+      eventSource?.close();
     };
   }, [endpoint]);
 

@@ -51,7 +51,7 @@ public class AttendanceService {
         log.setLateMinutes(lateMinutes);
 
         try {
-            return attendanceLogRepository.save(log);
+            return attendanceLogRepository.saveAndFlush(log);
         } catch (DataIntegrityViolationException e) {
             throw new RuntimeException("ALREADY_CHECKED_IN");
         }
