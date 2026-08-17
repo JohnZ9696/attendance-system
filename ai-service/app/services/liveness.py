@@ -11,16 +11,12 @@ LEFT_EYE = [362, 385, 387, 263, 373, 380]
 RIGHT_EYE = [33, 160, 158, 133, 153, 144]
 
 CALIBRATION_FRAMES = 3
-
-# Nhắm mắt khi EAR giảm còn dưới 88% mức mở
-CLOSED_EAR_RATIO = 0.88
-
-# Mở lại khi EAR phục hồi trên 94% mức mở
-REOPEN_EAR_RATIO = 0.94
+CLOSED_EAR_RATIO = 0.94
+REOPEN_EAR_RATIO = 0.98
+MAX_MISSED_FACE_FRAMES = 8
 
 REQUIRED_CLOSED_FRAMES = 1
 REQUIRED_REOPEN_FRAMES = 1
-MAX_MISSED_FACE_FRAMES = 3
 @dataclass
 class BlinkObservation:
     face_detected: bool

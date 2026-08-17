@@ -5,9 +5,11 @@ import com.iot.attendance.entity.VerificationLog;
 import com.iot.attendance.entity.VerificationResult;
 import com.iot.attendance.repository.StudentRepository;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class CheckInOrchestrationService {
@@ -33,8 +35,17 @@ public class CheckInOrchestrationService {
         VerificationLog verificationLog = verificationService.createPendingVerification(student, normalizedUid);
         fastApiClient.requestFaceVerification(verificationLog.getId(), student.getId(), cameraId)
                 .subscribe(
-                        response -> verificationCompletionService.complete(verificationLog.getId(), response),
-                        error -> verificationCompletionService.fail(verificationLog.getId(), error.getMessage())
+                        response -> {
+                            log.info("[VERIFICATION RESULT] {}", response.result());
+                            verificationCompletionService.complete(verificationLog.getId(), response);
+                        },
+                        error -> {
+                            log.error("Face verification failed", error);
+                            verificationCompletionService.fail(
+                                    verificationLog.getId(),
+                                    "FASTAPI_UNAVAILABLE_OR_TIMEOUT"
+                            );
+                        }
                 );
     }
 }

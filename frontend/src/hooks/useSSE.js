@@ -8,24 +8,15 @@ export function useSSE(endpoint) {
     let eventSource;
     let reconnectTimer;
 
-    const eventTypes = [
-      'connected',
-      'rfid_scan',
-      'device_status',
-      'verification_update',
-      'attendance_event',
-      'incident',
-    ];
-
-    const pushEvent = (type) => (event) => {
+    const pushEvent = (event) => {
       try {
-        const data = JSON.parse(event.data);
+        const parsed = JSON.parse(event.data);
 
         setEvents((previous) => [
           {
             id: `${Date.now()}-${Math.random()}`,
-            type,
-            data,
+            type: parsed.type || 'unknown',
+            data: parsed.data || {},
             timestamp: new Date(),
           },
           ...previous,
@@ -54,9 +45,7 @@ export function useSSE(endpoint) {
         setConnected(true);
       };
 
-      eventTypes.forEach((type) => {
-        eventSource.addEventListener(type, pushEvent(type));
-      });
+      eventSource.onmessage = pushEvent;
 
       eventSource.onerror = (error) => {
         console.error('SSE connection error:', error);

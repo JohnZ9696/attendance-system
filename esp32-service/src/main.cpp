@@ -27,7 +27,7 @@ constexpr char kWiFiPassword[] = "camsaike";
 constexpr char kDeviceId[]     = "door-01";
 
 constexpr char kServerCandidates[][40] = {
-  "http://192.168.1.104:8080/api/v1",
+  "http://192.168.1.112:8080/api/v1",
 };
 constexpr int kServerCandidatesCount = sizeof(kServerCandidates) / sizeof(kServerCandidates[0]);
 

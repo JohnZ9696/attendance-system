@@ -23,14 +23,20 @@ public class FastApiClient {
 
     private final WebClient webClient;
     private final String internalApiKey;
+    private final int captureLivenessTimeoutMs;
+    private final int faceMatchingTimeoutMs;
 
     public FastApiClient(
             WebClient.Builder builder,
             @Value("${fastapi.url:http://localhost:8000}") String fastApiUrl,
-            @Value("${fastapi.internal-api-key}") String internalApiKey
+            @Value("${fastapi.internal-api-key}") String internalApiKey,
+            @Value("${attendance.capture-liveness-timeout-ms:25000}") int captureLivenessTimeoutMs,
+            @Value("${attendance.face-matching-timeout-ms:20000}") int faceMatchingTimeoutMs
     ) {
         this.webClient = builder.baseUrl(fastApiUrl).build();
         this.internalApiKey = internalApiKey;
+        this.captureLivenessTimeoutMs = captureLivenessTimeoutMs;
+        this.faceMatchingTimeoutMs = faceMatchingTimeoutMs;
     }
 
     public FaceEmbeddingResponse createFaceEmbedding(MultipartFile image) {
@@ -63,8 +69,8 @@ public class FastApiClient {
                 sessionId,
                 expectedUserId,
                 cameraId,
-                10_000,
-                5_000
+                captureLivenessTimeoutMs,
+                faceMatchingTimeoutMs
         );
 
         return webClient.post()

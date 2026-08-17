@@ -9,8 +9,8 @@ class Settings(BaseSettings):
     internal_api_key: str
 
     face_similarity_threshold_percent: float = 30.0
-    capture_liveness_timeout_ms: int = 10_000
-    face_matching_timeout_ms: int = 5_000
+    capture_liveness_timeout_ms: int = 25_000
+    face_matching_timeout_ms: int = 20_000
     max_image_bytes: int = 5 * 1024 * 1024
 
     model_config = SettingsConfigDict(

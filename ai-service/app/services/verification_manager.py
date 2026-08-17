@@ -203,7 +203,15 @@ async def run_verification(request: VerificationRequest) -> VerificationResponse
             while int(time.time() * 1000) <= capture_deadline:
                 packets = buffer.packets_after(started_ms, last_sequence)
 
+                # MediaPipe có thể xử lý chậm hơn tốc độ ESP32-CAM gửi ảnh.
+                # Chỉ giữ một số frame mới nhất để tránh tồn hàng chục frame.
+                if len(packets) > 4:
+                    packets = packets[-4:]
+
                 for packet in packets:
+                    if int(time.time() * 1000) > capture_deadline:
+                        break
+
                     last_sequence = packet.sequence
                     saw_fresh_frame = True
                     observation = await asyncio.to_thread(detector.update, packet.frame)
@@ -213,6 +221,9 @@ async def run_verification(request: VerificationRequest) -> VerificationResponse
                         # Dùng chính frame hoàn tất blink làm frame đầu tiên để so khớp.
                         blink_frame = packet.frame
                         break
+
+                if int(time.time() * 1000) > capture_deadline:
+                    break
 
                 if blink_frame is not None:
                     break
@@ -249,18 +260,15 @@ async def run_verification(request: VerificationRequest) -> VerificationResponse
 
         while int(time.time() * 1000) <= match_deadline:
             packets = buffer.packets_after(started_ms, last_sequence)
-            for packet in packets:
-                last_sequence = packet.sequence
-                frames_to_match.append(packet.frame)
+
+            if packets:
+                newest_packet = packets[-1]
+                last_sequence = newest_packet.sequence
+
+                # Không cho DeepFace xử lý toàn bộ frame tồn đọng.
+                frames_to_match = [newest_packet.frame]
 
             while frames_to_match:
-                frame = frames_to_match.pop(0)
-                face_result = await asyncio.to_thread(
-                    extract_face_embedding,
-                    frame,
-                    False,
-                )
-
                 if int(time.time() * 1000) > match_deadline:
                     return _response(
                         request,
@@ -269,6 +277,13 @@ async def run_verification(request: VerificationRequest) -> VerificationResponse
                         liveness=True,
                         reason="FACE_MODEL_TIMEOUT",
                     )
+
+                frame = frames_to_match.pop(0)
+                face_result = await asyncio.to_thread(
+                    extract_face_embedding,
+                    frame,
+                    False,
+                )
 
                 if face_result.error == "MULTIPLE_FACES":
                     return _response(

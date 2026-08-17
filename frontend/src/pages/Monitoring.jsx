@@ -88,13 +88,13 @@ export default function Monitoring() {
     if (latest.type === 'verification_update') {
       if (latest.data.result === 'VERIFIED') {
         toast(
-          `Xác thực thành công: ${latest.data.studentName}`,
+          `Điểm danh thành công: ${latest.data.fullName}`,
           'success'
         );
       } else {
         toast(
           `Xác thực thất bại: ${
-            latest.data.failureReason || latest.data.result
+            latest.data.message || latest.data.result
           }`,
           'error'
         );
@@ -124,11 +124,21 @@ export default function Monitoring() {
         label = 'SUCCESS';
         message = `Điểm danh: ${e.data.studentName} (${e.data.studentId}) - ${e.data.status === 'LATE' ? `Muộn ${e.data.lateMinutes}p` : 'Đúng giờ'}`;
       } else if (e.type === 'verification_update') {
-        color = e.data.result === 'VERIFIED' ? 'var(--status-success)' : 'var(--status-warning)';
+        const verified = e.data.result === 'VERIFIED';
+
+        color = verified
+          ? 'var(--status-success)'
+          : 'var(--status-error)';
+
         label = e.data.result;
-        message = e.data.result === 'VERIFIED'
-          ? `Xác thực thành công (${(e.data.similarityPercent || 0).toFixed(1)}%)`
-          : `Xác thực thất bại: ${e.data.failureReason || e.data.result}`;
+
+        message = verified
+          ? `Điểm danh thành công - độ tương đồng ${(
+              e.data.similarityPercent || 0
+            ).toFixed(1)}%`
+          : `Xác thực thất bại: ${
+              e.data.message || e.data.result
+            }`;
       } else if (e.type === 'device_status') {
         color = e.data.status === 'ONLINE' ? 'var(--status-success)' : 'var(--status-error)';
         label = e.data.status;

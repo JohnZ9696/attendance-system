@@ -7,6 +7,7 @@ import com.iot.attendance.repository.VerificationLogRepository;
 import jakarta.transaction.Transactional;
 import java.math.BigDecimal;
 import java.time.OffsetDateTime;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.UUID;
 import org.slf4j.Logger;
@@ -53,22 +54,15 @@ public class VerificationCompletionService {
         log.setCompletedAt(OffsetDateTime.now());
         verificationLogRepository.save(log);
 
-        // Publish verification_update event
-        sseEventService.publishEvent("verification_update", Map.of(
-                "verificationId", verificationId.toString(),
-                "studentId", log.getStudent().getId().toString(),
-                "studentName", log.getStudent().getFullName(),
-                "result", response.result().name(),
-                "similarityPercent", response.similarityPercent(),
-                "livenessPassed", response.livenessPassed(),
-                "failureReason", response.failureReason(),
-                "completedAt", log.getCompletedAt().toString()
-        ));
+        String resultName = response.result().name();
+        String message = response.failureReason();
 
         if (response.result() == VerificationResult.VERIFIED) {
             try {
                 var attendanceLog = attendanceService.recordAttendance(log.getStudent(), log);
-                // Publish attendance_event
+                message = "Điểm danh thành công";
+
+                // Publish attendance_event cho History tự động tải lại
                 sseEventService.publishEvent("attendance_event", Map.of(
                         "studentId", log.getStudent().getId().toString(),
                         "studentName", log.getStudent().getFullName(),
@@ -77,6 +71,7 @@ public class VerificationCompletionService {
                         "lateMinutes", attendanceLog.getLateMinutes(),
                         "checkTime", attendanceLog.getCheckTime().toString()
                 ));
+
                 // Notify parents
                 try {
                     parentNotificationService.notifyCheckIn(log.getStudent(), attendanceLog, log);
@@ -84,11 +79,30 @@ public class VerificationCompletionService {
                     LOGGER.error("Parent notification failed for verification {}", verificationId, notificationException);
                 }
             } catch (RuntimeException exception) {
-                if (!"ALREADY_CHECKED_IN".equals(exception.getMessage())) {
+                if ("ALREADY_CHECKED_IN".equals(exception.getMessage())) {
+                    resultName = "ALREADY_CHECKED_IN";
+                    message = "Sinh viên đã điểm danh hôm nay";
+                } else {
                     throw exception;
                 }
             }
         }
+
+        if (message == null || message.isBlank()) {
+            message = resultName;
+        }
+
+        Map<String, Object> event = new LinkedHashMap<>();
+        event.put("verificationId", log.getId());
+        event.put("studentId", log.getStudent().getId());
+        event.put("mssv", log.getStudent().getMssv());
+        event.put("fullName", log.getStudent().getFullName());
+        event.put("result", resultName);
+        event.put("message", message);
+        event.put("similarityPercent", response.similarityPercent());
+        event.put("livenessPassed", response.livenessPassed());
+
+        sseEventService.publishEvent("verification_update", event);
     }
 
     @Transactional
@@ -100,15 +114,12 @@ public class VerificationCompletionService {
                 log.setCompletedAt(OffsetDateTime.now());
                 verificationLogRepository.save(log);
 
-                sseEventService.publishEvent("verification_update", Map.of(
-                        "verificationId", verificationId.toString(),
-                        "studentId", log.getStudent().getId().toString(),
-                        "studentName", log.getStudent().getFullName(),
-                        "result", "ERROR",
-                        "similarityPercent", 0.0,
-                        "livenessPassed", false,
-                        "failureReason", reason
-                ));
+                Map<String, Object> event = new LinkedHashMap<>();
+                event.put("verificationId", verificationId);
+                event.put("result", "ERROR");
+                event.put("message", reason);
+
+                sseEventService.publishEvent("verification_update", event);
             }
         });
     }
