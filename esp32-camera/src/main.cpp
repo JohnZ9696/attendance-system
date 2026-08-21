@@ -47,6 +47,9 @@ unsigned long lastCommandPollMs = 0;
 bool ledState = false;
 bool captureRequested = false;
 
+// Đánh dấu HTTP 200 đã được in trong phiên hiện tại.
+bool frameSuccessPrinted = false;
+
 
 // ============================================================================
 // WiFi Connection
@@ -139,6 +142,7 @@ void pollCaptureCommand() {
 
   if (WiFi.status() != WL_CONNECTED) {
     captureRequested = false;
+    frameSuccessPrinted = false;
     Serial.println("[COMMAND] WiFi offline");
     return;
   }
@@ -151,31 +155,44 @@ void pollCaptureCommand() {
   http.setTimeout(2000);
 
   int code = http.GET();
-  Serial.printf("[COMMAND] HTTP=%d\n", code);
 
   if (code == HTTP_CODE_OK) {
     String response = http.getString();
-
-    Serial.print("[COMMAND] Body=");
-    Serial.println(response);
 
     response.replace(" ", "");
     response.replace("\r", "");
     response.replace("\n", "");
 
-    captureRequested =
+    bool newCaptureRequested =
         response.indexOf("\"active\":true") >= 0;
 
-    Serial.printf(
-        "[COMMAND] captureRequested=%d\n",
-        captureRequested
-    );
+    // Chỉ in log khi active thay đổi.
+    if (newCaptureRequested != captureRequested) {
+      captureRequested = newCaptureRequested;
+
+      if (captureRequested) {
+        // Bắt đầu phiên mới: cho phép in HTTP 200 một lần.
+        frameSuccessPrinted = false;
+        Serial.println("[CAMERA] Capture started");
+      } else {
+        Serial.println("[CAMERA] Capture stopped");
+      }
+    }
   } else {
     captureRequested = false;
-    Serial.printf(
-        "[COMMAND] Error=%s\n",
-        http.errorToString(code).c_str()
-    );
+    frameSuccessPrinted = false;
+
+    if (code < 0) {
+      Serial.printf(
+          "[COMMAND] Failed: %s\n",
+          http.errorToString(code).c_str()
+      );
+    } else {
+      Serial.printf(
+          "[COMMAND] HTTP error: %d\n",
+          code
+      );
+    }
   }
 
   http.end();
@@ -191,19 +208,11 @@ void sendFrameRaw() {
 
   lastFrameMs = millis();
 
-  Serial.println("[FRAME] Getting camera frame...");
-
   camera_fb_t* fb = esp_camera_fb_get();
 
   if (!fb) {
-    Serial.println("[FRAME] Capture failed");
     return;
   }
-
-  Serial.printf(
-      "[FRAME] Captured %u bytes\n",
-      fb->len
-  );
 
   HTTPClient http;
   String url =
@@ -255,7 +264,6 @@ void sendFrameRaw() {
       : (uint8_t*)malloc(totalLen);
 
   if (!postData) {
-    Serial.println("[FRAME] Malloc failed");
     esp_camera_fb_return(fb);
     http.end();
     return;
@@ -279,29 +287,32 @@ void sendFrameRaw() {
       tail.length()
   );
 
-  Serial.printf(
-      "[FRAME] POST starting, total=%u bytes\n",
-      totalLen
-  );
-
-  unsigned long startedMs = millis();
-
   int code = http.POST(
       postData,
       totalLen
   );
 
-  Serial.printf(
-      "[FRAME] POST finished: HTTP=%d, time=%lu ms\n",
-      code,
-      millis() - startedMs
-  );
+  if (code == HTTP_CODE_OK) {
+    // Các frame vẫn được gửi liên tục nhưng chỉ in 200 một lần.
+    if (!frameSuccessPrinted) {
+      Serial.println("[FRAME] Connected - HTTP 200");
+      frameSuccessPrinted = true;
+    }
+  } else {
+    // Khi có lỗi, cho phép lần thành công tiếp theo được in lại.
+    frameSuccessPrinted = false;
 
-  if (code < 0) {
-    Serial.printf(
-        "[FRAME] Error=%s\n",
-        http.errorToString(code).c_str()
-    );
+    if (code > 0) {
+      Serial.printf(
+          "[FRAME] HTTP error: %d\n",
+          code
+      );
+    } else {
+      Serial.printf(
+          "[FRAME] Send failed: %s\n",
+          http.errorToString(code).c_str()
+      );
+    }
   }
 
   free(postData);
@@ -337,7 +348,6 @@ void loop() {
   digitalWrite(FLASH_LED_PIN, LOW);
 
   if (captureRequested) {
-    Serial.println("[CAMERA] Capturing...");
     sendFrameRaw();
   }
 
