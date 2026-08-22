@@ -2,13 +2,12 @@
 #include <WiFi.h>
 #include <esp_camera.h>
 #include <HTTPClient.h>
+#include "wifi_config.h"
 
 // ============================================================================
 // Configuration
 // ============================================================================
 
-const char* WIFI_SSID = "Minh Thu";
-const char* WIFI_PASSWORD = "camsaike";
 const char* INTERNAL_API_KEY = "s5HpmgoZ4Wl5A9v8pJ6qLuAyWIrAZLU_nP3W3AeaUDc";
 const char* API_URL = "http://192.168.1.104:8000/internal/v1/cameras/";
 const char* CAMERA_ID = "cam-01";

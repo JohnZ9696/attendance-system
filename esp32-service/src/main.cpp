@@ -4,6 +4,7 @@
 #include <HTTPClient.h>
 #include <MFRC522.h>
 #include <ArduinoJson.h>
+#include <fstream>
 
 // ============================================================================
 // Pin Definitions (mandatory pinmap)
@@ -19,11 +20,13 @@ constexpr uint8_t LED_GREEN_PIN = 26;
 constexpr uint8_t LED_RED_PIN   = 27;
 constexpr uint8_t BUTTON_PIN    = 32;  // INPUT_PULLUP: LOW = pressed
 
+#include "wifi_config.h"
+
 // ============================================================================
 // Configuration
 // ============================================================================
-constexpr char kWiFiSsid[]     = "Minh Thu";
-constexpr char kWiFiPassword[] = "camsaike";
+constexpr char kWiFiSsid[]     = WIFI_SSID;
+constexpr char kWiFiPassword[] = WIFI_PASSWORD;
 constexpr char kDeviceId[]     = "door-01";
 
 constexpr char kServerCandidates[][40] = {
