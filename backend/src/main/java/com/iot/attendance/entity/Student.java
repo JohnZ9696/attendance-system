@@ -6,8 +6,6 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
-import lombok.Getter;
-import lombok.Setter;
 import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.annotations.UpdateTimestamp;
@@ -18,8 +16,6 @@ import java.util.UUID;
 
 @Entity
 @Table(name = "students")
-@Getter
-@Setter
 public class Student {
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
@@ -54,4 +50,24 @@ public class Student {
     @UpdateTimestamp
     @Column(name = "updated_at")
     private OffsetDateTime updatedAt;
+
+    public UUID getId() { return id; }
+    public void setId(UUID id) { this.id = id; }
+    public String getMssv() { return mssv; }
+    public void setMssv(String mssv) { this.mssv = mssv; }
+    public String getFullName() { return fullName; }
+    public void setFullName(String fullName) { this.fullName = fullName; }
+    public String getUid() { return uid; }
+    public void setUid(String uid) { this.uid = uid; }
+    public String getFaceEmbedding() { return faceEmbedding; }
+    public void setFaceEmbedding(String faceEmbedding) { this.faceEmbedding = faceEmbedding; }
+    public String getParentPhone() { return parentPhone; }
+    public void setParentPhone(String parentPhone) { this.parentPhone = parentPhone; }
+    public String getParentEmail() { return parentEmail; }
+    public void setParentEmail(String parentEmail) { this.parentEmail = parentEmail; }
+    public Boolean getIsActive() { return isActive; }
+    public void setIsActive(Boolean isActive) { this.isActive = isActive; }
+    public OffsetDateTime getCreatedAt() { return createdAt; }
+    public OffsetDateTime getUpdatedAt() { return updatedAt; }
+    public void setUpdatedAt(OffsetDateTime updatedAt) { this.updatedAt = updatedAt; }
 }

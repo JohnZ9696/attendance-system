@@ -1,6 +1,5 @@
 package com.iot.attendance.controller;
 
-import lombok.RequiredArgsConstructor;
 import org.apache.poi.ss.usermodel.Workbook;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.springframework.http.HttpHeaders;
@@ -27,11 +26,15 @@ import com.iot.attendance.repository.StudentRepository;
 
 @RestController
 @RequestMapping("/api/v1/reports")
-@RequiredArgsConstructor
 public class ReportController {
 
     private final AttendanceLogRepository attendanceLogRepository;
     private final StudentRepository studentRepository;
+
+    public ReportController(AttendanceLogRepository attendanceLogRepository, StudentRepository studentRepository) {
+        this.attendanceLogRepository = attendanceLogRepository;
+        this.studentRepository = studentRepository;
+    }
 
     @GetMapping("/attendance.xlsx")
     public ResponseEntity<byte[]> exportExcel() throws IOException {

@@ -10,8 +10,8 @@ import com.iot.attendance.repository.AttendanceLogRepository;
 import com.iot.attendance.repository.StudentRepository;
 import com.iot.attendance.repository.VerificationLogRepository;
 import jakarta.transaction.Transactional;
-import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
@@ -21,10 +21,10 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.UUID;
 
-@Slf4j
 @Service
-@RequiredArgsConstructor
 public class CheckInFlowService {
+
+    private static final Logger log = LoggerFactory.getLogger(CheckInFlowService.class);
 
     private final StudentRepository studentRepository;
     private final VerificationLogRepository verificationLogRepository;
@@ -36,6 +36,16 @@ public class CheckInFlowService {
 
     @Value("${attendance.camera-id:cam-01}")
     private String cameraId;
+
+    public CheckInFlowService(StudentRepository studentRepository, VerificationLogRepository verificationLogRepository, FastApiClient fastApiClient, AttendanceLogRepository attendanceLogRepository, AttendanceService attendanceService, SseEventService sseEventService, ParentNotificationService parentNotificationService) {
+        this.studentRepository = studentRepository;
+        this.verificationLogRepository = verificationLogRepository;
+        this.fastApiClient = fastApiClient;
+        this.attendanceLogRepository = attendanceLogRepository;
+        this.attendanceService = attendanceService;
+        this.sseEventService = sseEventService;
+        this.parentNotificationService = parentNotificationService;
+    }
 
     public RfidScanResponse handleRfidScan(String deviceId, String rfidUid) {
         String normalizedUid = rfidUid.toUpperCase().replaceAll("[:\\s]", "");
@@ -106,7 +116,7 @@ public class CheckInFlowService {
         if (response.result() == VerificationResult.VERIFIED) {
             try {
                 var attendanceLog = attendanceService.recordAttendance(log.getStudent(), log);
-                message = "Điểm danh thành công";
+                message = "Diem danh thanh cong";
 
                 sseEventService.publishEvent("attendance_event", Map.of(
                         "studentId", log.getStudent().getId().toString(),
@@ -125,7 +135,7 @@ public class CheckInFlowService {
             } catch (RuntimeException exception) {
                 if ("ALREADY_CHECKED_IN".equals(exception.getMessage())) {
                     resultName = "ALREADY_CHECKED_IN";
-                    message = "Sinh viên đã điểm danh hôm nay";
+                    message = "Sinh vien da diem danh hom nay";
                 } else {
                     throw exception;
                 }

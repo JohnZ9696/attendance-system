@@ -8,8 +8,6 @@ import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
-import lombok.Getter;
-import lombok.Setter;
 
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
@@ -17,8 +15,6 @@ import java.util.UUID;
 
 @Entity
 @Table(name = "attendance_logs")
-@Getter
-@Setter
 public class AttendanceLog {
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
@@ -43,4 +39,19 @@ public class AttendanceLog {
 
     @Column(name = "late_minutes")
     private Integer lateMinutes;
+
+    public UUID getId() { return id; }
+    public void setId(UUID id) { this.id = id; }
+    public Student getStudent() { return student; }
+    public void setStudent(Student student) { this.student = student; }
+    public VerificationLog getVerification() { return verification; }
+    public void setVerification(VerificationLog verification) { this.verification = verification; }
+    public LocalDate getAttendanceDate() { return attendanceDate; }
+    public void setAttendanceDate(LocalDate attendanceDate) { this.attendanceDate = attendanceDate; }
+    public OffsetDateTime getCheckTime() { return checkTime; }
+    public void setCheckTime(OffsetDateTime checkTime) { this.checkTime = checkTime; }
+    public String getStatus() { return status; }
+    public void setStatus(String status) { this.status = status; }
+    public Integer getLateMinutes() { return lateMinutes; }
+    public void setLateMinutes(Integer lateMinutes) { this.lateMinutes = lateMinutes; }
 }
