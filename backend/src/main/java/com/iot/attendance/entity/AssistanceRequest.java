@@ -1,5 +1,6 @@
 package com.iot.attendance.entity;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.FetchType;
@@ -22,22 +23,24 @@ import java.util.UUID;
 @Getter
 @Setter
 public class AssistanceRequest {
+
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
     private UUID id;
 
+    @JsonIgnore
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "student_id")
     private Student student;
 
     @Column(name = "source")
-    private String source; // PUSH_BUTTON, WEB
+    private String source;
 
     @Column(nullable = false)
     private String message;
 
     @Column(name = "status")
-    private String status; // OPEN, ACKNOWLEDGED, RESOLVED
+    private String status;
 
     @Column(name = "notification_sent")
     private Boolean notificationSent = false;

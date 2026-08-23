@@ -4,7 +4,6 @@
 #include <HTTPClient.h>
 #include <MFRC522.h>
 #include <ArduinoJson.h>
-#include <fstream>
 
 // ============================================================================
 // Pin Definitions (mandatory pinmap)
@@ -30,7 +29,7 @@ constexpr char kWiFiPassword[] = WIFI_PASSWORD;
 constexpr char kDeviceId[]     = "door-01";
 
 constexpr char kServerCandidates[][40] = {
-  "http://192.168.1.184:8080/api/v1",
+  "http://192.168.1.21:8080/api/v1",
 };
 constexpr int kServerCandidatesCount = sizeof(kServerCandidates) / sizeof(kServerCandidates[0]);
 
@@ -76,6 +75,7 @@ unsigned long lastHeartbeatMs    = 0UL;
 String lastScannedUid;
 bool enrollmentMode = false;
 unsigned long lastEnrollmentPollMs = 0UL;
+bool rfidReady = false;
 
 // ----------------------------------------------------------------------------
 // Low-level peripheral helpers
@@ -375,7 +375,17 @@ void updateFeedback() {
 // RFID
 // ----------------------------------------------------------------------------
 String readCardUid() {
-  if (!rfid.PICC_IsNewCardPresent() || !rfid.PICC_ReadCardSerial()) return "";
+  if (!rfidReady) return "";
+
+  // Chua co the moi: im lang va tiep tuc cho.
+  if (!rfid.PICC_IsNewCardPresent()) return "";
+
+  // Co the nhung khong doc duoc UID.
+  if (!rfid.PICC_ReadCardSerial()) {
+    Serial.println("[RFID] Card detected but UID read failed");
+    return "";
+  }
+
   String uid = "";
   for (byte i = 0; i < rfid.uid.size; i++) {
     if (rfid.uid.uidByte[i] < 0x10) uid += "0";
@@ -386,12 +396,15 @@ String readCardUid() {
 }
 
 void handleRfidScan() {
-  if (feedbackState != FeedbackState::IDLE) return;
   static unsigned long lastScanMs = 0UL;
+
+  if (!rfidReady) return;
+
   if (millis() - lastScanMs < CARD_COOLDOWN_MS) return;
 
   const String uid = readCardUid();
   if (uid.length() == 0) return;
+
   lastScanMs = millis();
 
   rfid.PICC_HaltA();
@@ -449,11 +462,25 @@ void setup() {
   pinMode(BUTTON_PIN, INPUT_PULLUP);
   allOff();
 
+  SPI.begin(SPI_SCK_PIN, SPI_MISO_PIN, SPI_MOSI_PIN, RFID_SS_PIN);
+  rfid.PCD_Init();
+  delay(100);
+
+  const byte version = rfid.PCD_ReadRegister(MFRC522::VersionReg);
+  rfid.PCD_DumpVersionToSerial();
+
+  rfidReady = version != 0x00 && version != 0xFF;
+
+  if (rfidReady) {
+    rfid.PCD_AntennaOn();
+  } else {
+    Serial.println("[RFID] ERROR: Khong giao tiep duoc voi RC522");
+    Serial.println("[RFID] Kiem tra SDA=GPIO16, RST=GPIO17, SCK=18, MISO=19, MOSI=23, 3.3V va GND");
+  }
+
   connectToWifi();
   syncTime();
 
-  SPI.begin(SPI_SCK_PIN, SPI_MISO_PIN, SPI_MOSI_PIN, RFID_SS_PIN);
-  rfid.PCD_Init();
   Serial.println("RFID Attendance System ready");
 }
 
