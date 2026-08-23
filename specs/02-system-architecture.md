@@ -11,7 +11,7 @@ flowchart TD
     F -->|face profile read| U["Supabase"]
     F -->|CV result| S
     S -->|users, attendance, incidents, config| U
-    S --> N["Email/SMS provider"]
+    S --> N["Email (Gmail SMTP) & SMS (Twilio) provider"]
 ```
 
 ## Component Boundaries

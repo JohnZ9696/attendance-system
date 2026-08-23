@@ -89,10 +89,12 @@
 - Device status cards: ESP32 Gateway, ESP32-CAM, RFID Reader
 - Real-time log panel (simulated data)
 
-### 2.5 Reports (`/reports`)
-- Weekly stacked bar chart (present, late, absent per weekday)
-- Today's donut chart (on-time, late, absent percentages)
-- Uses Recharts
+### 2.5 Reports (`/report`)
+- Render a beautiful, premium metric dashboard.
+- Metrics are pulled from Supabase based on the `attendance_logs` and `verification_logs` tables.
+- Includes Weekly stacked bar chart (present, late, absent per weekday).
+- Includes Today's donut chart (on-time, late, absent percentages).
+- Uses Recharts and modern design aesthetics (glassmorphism, vibrant palettes).
 
 ### 2.6 Settings (`/settings`)
 - Class start time + grace period with live late-threshold display

@@ -155,3 +155,14 @@ create index if not exists idx_attendance_date on public.attendance_logs (attend
 create index if not exists idx_attendance_status_date on public.attendance_logs (status, attendance_date desc);
 create index if not exists idx_assistance_status_time on public.assistance_requests (status, created_at desc);
 ```
+
+## 7. Database Cleanup
+
+```sql
+-- Backup the unused legacy attendance table
+CREATE TABLE public.attendance_logs_legacy_backup AS
+SELECT * FROM public.attendance_logs_legacy;
+
+-- Drop the original legacy table as it is not referenced in the codebase
+DROP TABLE public.attendance_logs_legacy;
+```

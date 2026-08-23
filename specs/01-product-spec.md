@@ -14,10 +14,11 @@ The Attendance System uses RFID and Facial Recognition to automate attendance fo
 | FR-05 | User Management (Web) | Add, edit, delete users; enroll faces and RFID tags. Lead Proctor only. |
 | FR-06 | Realtime Monitoring (Web) | View live camera, ESP32 status, and live attendance via SSE. |
 | FR-07 | Attendance History (Web) | Search and filter past attendance records. |
-| FR-08 | Reports & Stats (Web) | Display charts, late statistics, and export to Excel. |
+| FR-08 | Reports & Stats (Web) | Display beautiful charts and late statistics pulled from `attendance_logs` and `verification_logs`, and export to Excel. |
 | FR-09 | System Settings (Web) | Configure start time (07:30 cutoff), late time, and thresholds. Lead Proctor only. |
-| FR-10 | Notifications | Send email, SMS, and buzzer alerts on events. |
+| FR-10 | Notifications | Send email (via Google/Gmail SMTP - IMPLEMENTED) and SMS (via Twilio) alerts on events. |
 | FR-11 | Hardware Help Button | Push button on ESP32 sends a hardware help request to the web dashboard. |
+| FR-12 | Automated Cleanup | Periodically run jobs to archive/delete resolved assistance requests to maintain DB health. |
 
 ## 3. Scope Adjustments (SDD Alignment)
 - Check-in only. No check-out.

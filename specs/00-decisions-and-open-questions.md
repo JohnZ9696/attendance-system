@@ -29,7 +29,14 @@
 2. **Timeout Split:** A single 5s timeout is insufficient. We have a 10s capture/liveness window and a 5s matching timeout after a frame is acquired.
 3. **Similarity Percentage:** The 30% threshold implies CV tools returning a distance metric must normalize it to a 0..100 percentage.
 
+## Resolved Questions (New Decisions)
+
+| ID | Decision |
+|---|---|
+| DEC-19 | Email notifications will use Google/Gmail SMTP adapter. |
+| DEC-20 | SMS notifications will be implemented using Twilio. |
+| DEC-21 | Automated cleanup jobs will run periodically to archive or delete resolved assistance requests over time to optimize table size. |
+
 ## Open Questions
 
-- What specific email/SMS provider should be used for notifications? Currently unspecified, relying on generic adapter.
-- Should there be an automated cleanup for resolved assistance requests over time?
+- (None currently)
