@@ -8,6 +8,8 @@ import java.util.Optional;
 import java.util.UUID;
 
 public interface AttendanceLogRepository extends JpaRepository<AttendanceLog, UUID> {
+    Optional<AttendanceLog> findByVerification_Id(UUID verificationId);
+
     Optional<AttendanceLog> findByStudentIdAndAttendanceDate(UUID studentId, LocalDate attendanceDate);
 
     List<AttendanceLog> findByStudentIdOrderByCheckTimeDesc(UUID studentId);

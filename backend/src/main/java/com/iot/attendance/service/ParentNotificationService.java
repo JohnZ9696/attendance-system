@@ -22,13 +22,16 @@ public class ParentNotificationService {
 
     private final ObjectProvider<JavaMailSender> mailSenderProvider;
     private final VerificationLogRepository verificationLogRepository;
+    private final TwilioSmsService twilioSmsService;
 
     public ParentNotificationService(
             ObjectProvider<JavaMailSender> mailSenderProvider,
-            VerificationLogRepository verificationLogRepository
+            VerificationLogRepository verificationLogRepository,
+            TwilioSmsService twilioSmsService
     ) {
         this.mailSenderProvider = mailSenderProvider;
         this.verificationLogRepository = verificationLogRepository;
+        this.twilioSmsService = twilioSmsService;
     }
 
     public void notifyCheckIn(Student student, AttendanceLog attendanceLog, VerificationLog verificationLog) {
@@ -60,8 +63,14 @@ public class ParentNotificationService {
         }
 
         if (hasText(student.getParentPhone())) {
-            // No SMS provider configured yet; record the attempt so it is visible.
-            log.info("Parent SMS would be sent to {} for student {}: {}", student.getParentPhone(), student.getId(), body);
+            try {
+                twilioSmsService.sendSms(student.getParentPhone(), body);
+                delivered = true;
+            } catch (RuntimeException exception) {
+                if (error == null) error = "SMS_FAILED: " + exception.getMessage();
+                else error += " | SMS_FAILED: " + exception.getMessage();
+                log.warn("Parent SMS notification failed for student {}", student.getId(), exception);
+            }
         }
 
         if (!delivered && !hasText(student.getParentEmail()) && !hasText(student.getParentPhone())) {

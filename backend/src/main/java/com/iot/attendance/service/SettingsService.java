@@ -13,7 +13,7 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class SettingsService {
 
-    public static final String CUTOFF_TIME_KEY = "attendance.cutoffTime";
+    public static final String CUTOFF_TIME_KEY = "attendance.classStartTime";
     public static final String SIMILARITY_THRESHOLD_KEY = "face.similarityThresholdPercent";
     public static final String DAY_OFFS_KEY = "attendance.dayOffs";
     public static final String WEEKLY_DAY_OFFS_KEY = "attendance.weeklyDayOffs";
@@ -29,41 +29,36 @@ public class SettingsService {
     }
 
     public Map<String, Object> getAllSettings() {
-        Map<String, String> stored = new LinkedHashMap<>();
-        for (SystemSetting setting : systemSettingsRepository.findAll()) {
-            stored.put(setting.getKey(), setting.getValue());
-        }
-
         Map<String, Object> settings = new LinkedHashMap<>();
-        settings.put("attendance_cutoff_time", stored.getOrDefault(CUTOFF_TIME_KEY, DEFAULT_CUTOFF_TIME));
-        settings.put("face_similarity_threshold_percent",
-                Integer.parseInt(stored.getOrDefault(SIMILARITY_THRESHOLD_KEY, DEFAULT_SIMILARITY_THRESHOLD)));
-        settings.put("day_offs", parseCsv(stored.get(DAY_OFFS_KEY)));
-        settings.put("weekly_day_offs", parseIntList(stored.getOrDefault(WEEKLY_DAY_OFFS_KEY, DEFAULT_WEEKLY_DAY_OFFS)));
+        for (SystemSetting setting : systemSettingsRepository.findAll()) {
+            Object val = setting.getValue();
+            if (setting.getKey().equals(DAY_OFFS_KEY)) {
+                val = parseCsv(setting.getValue());
+            } else if (setting.getKey().equals(WEEKLY_DAY_OFFS_KEY)) {
+                val = parseIntList(setting.getValue());
+            } else if (setting.getKey().equals(SIMILARITY_THRESHOLD_KEY)) {
+                try { val = Integer.parseInt(setting.getValue()); } catch(Exception e){}
+            }
+            settings.put(setting.getKey(), val);
+        }
+        
+        settings.putIfAbsent(CUTOFF_TIME_KEY, DEFAULT_CUTOFF_TIME);
+        settings.putIfAbsent(SIMILARITY_THRESHOLD_KEY, Integer.parseInt(DEFAULT_SIMILARITY_THRESHOLD));
+        settings.putIfAbsent(DAY_OFFS_KEY, List.of());
+        settings.putIfAbsent(WEEKLY_DAY_OFFS_KEY, parseCsv(DEFAULT_WEEKLY_DAY_OFFS).stream().map(Integer::parseInt).toList());
+        
         return settings;
     }
 
     @Transactional
     public Map<String, Object> updateSettings(Map<String, Object> updates) {
-        Object cutoffTime = updates.get("attendance_cutoff_time");
-        if (cutoffTime != null) {
-            save(CUTOFF_TIME_KEY, cutoffTime.toString());
-        }
-
-        Object similarityThreshold = updates.get("face_similarity_threshold_percent");
-        if (similarityThreshold != null) {
-            save(SIMILARITY_THRESHOLD_KEY, similarityThreshold.toString());
-        }
-
-        Object dayOffs = updates.get("day_offs");
-        if (dayOffs instanceof List<?> list) {
-            save(DAY_OFFS_KEY, list.stream().map(Object::toString).collect(Collectors.joining(",")));
-        }
-
-        Object weeklyDayOffs = updates.get("weekly_day_offs");
-        if (weeklyDayOffs instanceof List<?> list) {
-            save(WEEKLY_DAY_OFFS_KEY, list.stream().map(Object::toString).collect(Collectors.joining(",")));
-        }
+        updates.forEach((key, value) -> {
+            if (value instanceof List<?> list) {
+                save(key, list.stream().map(Object::toString).collect(Collectors.joining(",")));
+            } else {
+                save(key, String.valueOf(value));
+            }
+        });
 
         return getAllSettings();
     }

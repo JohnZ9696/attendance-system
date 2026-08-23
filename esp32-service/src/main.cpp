@@ -267,7 +267,7 @@ void sendRfidScan(const String& uid) {
   String payload;
   serializeJson(doc, payload);
 
-  http.setTimeout(15000); // Allow time for face match
+  http.setTimeout(50000); // Allow time for face match
   int code = http.POST(payload);
   
   if (code > 0) {

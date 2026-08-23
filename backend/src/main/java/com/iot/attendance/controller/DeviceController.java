@@ -1,6 +1,7 @@
 package com.iot.attendance.controller;
 
-import com.iot.attendance.service.CheckInOrchestrationService;
+import com.iot.attendance.dto.RfidScanResponse;
+import com.iot.attendance.service.CheckInFlowService;
 import com.iot.attendance.service.SseEventService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
@@ -13,7 +14,7 @@ import java.util.Map;
 @RequiredArgsConstructor
 public class DeviceController {
 
-    private final CheckInOrchestrationService orchestrationService;
+    private final CheckInFlowService orchestrationService;
     private final SseEventService sseEventService;
 
     @PostMapping("/{deviceId}/rfid-scans")
@@ -24,8 +25,20 @@ public class DeviceController {
                 "scannedAt", OffsetDateTime.now().toString()
         ));
 
-        orchestrationService.handleRfidScan(deviceId, payload.get("uid"));
-        return ResponseEntity.ok().build();
+        try {
+            var response = orchestrationService.handleRfidScan(deviceId, payload.get("uid"));
+            
+            if (response.errorCode() != null && !"ALREADY_CHECKED_IN".equals(response.errorCode()) && !"VERIFIED".equals(response.errorCode())) {
+                int status = switch (response.errorCode()) {
+                    case "RFID_INVALID", "STUDENT_NOT_FOUND_OR_INACTIVE" -> 404;
+                    default -> 422;
+                };
+                return ResponseEntity.status(status).body(response);
+            }
+            return ResponseEntity.ok(response);
+        } catch (Exception e) {
+            return ResponseEntity.status(400).body(Map.of("message", e.getMessage(), "errorCode", "INVALID_REQUEST"));
+        }
     }
 
     @PostMapping("/{deviceId}/heartbeat")

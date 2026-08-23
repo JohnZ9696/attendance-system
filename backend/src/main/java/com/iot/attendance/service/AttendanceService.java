@@ -20,9 +20,11 @@ import java.time.temporal.ChronoUnit;
 public class AttendanceService {
 
     private final AttendanceLogRepository attendanceLogRepository;
+    private final SettingsService settingsService;
 
-    public AttendanceService(AttendanceLogRepository attendanceLogRepository) {
+    public AttendanceService(AttendanceLogRepository attendanceLogRepository, SettingsService settingsService) {
         this.attendanceLogRepository = attendanceLogRepository;
+        this.settingsService = settingsService;
     }
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)
@@ -32,7 +34,13 @@ public class AttendanceService {
         LocalDate date = now.toLocalDate();
         LocalTime time = now.toLocalTime();
 
-        LocalTime cutoff = LocalTime.of(7, 30, 0);
+        String cutoffStr = String.valueOf(settingsService.getAllSettings().get(SettingsService.CUTOFF_TIME_KEY));
+        LocalTime cutoff;
+        try {
+            cutoff = LocalTime.parse(cutoffStr);
+        } catch (Exception e) {
+            cutoff = LocalTime.of(7, 30, 0);
+        }
 
         String status = "ON_TIME";
         Integer lateMinutes = 0;
