@@ -6,7 +6,7 @@ create table if not exists students (
   mssv         text unique not null,
   full_name    text not null,
   uid          text unique,
-  face_encoding jsonb,
+  face_embedding jsonb,
   created_at   timestamptz not null default now()
 );
 

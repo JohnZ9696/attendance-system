@@ -29,7 +29,7 @@ public class User {
     private String mssv;
 
     @JdbcTypeCode(SqlTypes.JSON)
-    @Column(name = "face_encoding", columnDefinition = "jsonb")
+    @Column(name = "face_embedding", columnDefinition = "jsonb")
     private String faceEmbedding;
 
     @Column(name = "created_at", insertable = false, updatable = false)
