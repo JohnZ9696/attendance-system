@@ -53,7 +53,7 @@ export const apiClient = {
     return request(`/attendance?${searchParams}`);
   },
   getTodayAttendance: () => request('/attendance/today'),
-  getAttendanceStats: () => request('/attendance/stats'),
+  getAttendanceStats: () => request('/reports/metrics'),
   getAssistanceRequests: () => request('/assistance'),
   updateAssistanceStatus: (id, status) => request(`/assistance/${id}/status`, {
     method: 'PATCH',
