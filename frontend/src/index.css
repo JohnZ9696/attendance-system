@@ -71,6 +71,26 @@ h3 { font-size: 0.95rem; font-weight: 600; }
 .tone-red { color: #b63c3c; background: #f8e8e8; }
 
 .dashboard-grid { display: grid; grid-template-columns: minmax(0, 1.7fr) minmax(300px, 1fr); gap: 12px; }
+.reports-grid { display: grid; grid-template-columns: minmax(0, 1.7fr) minmax(280px, 1fr); gap: 12px; }
+.reports-page .stat-panel { min-height: 92px; }
+.reports-chart-panel, .attendance-rate-panel { min-width: 0; }
+.report-period { color: var(--text-muted); font-size: .75rem; border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 4px 8px; white-space: nowrap; }
+.report-chart-frame { height: 320px; min-width: 0; }
+.report-chart-frame .recharts-text { fill: var(--text-muted); font-size: 12px; }
+.rate-value { display: flex; align-items: baseline; gap: 8px; margin: 28px 0 14px; }
+.rate-value strong { font-size: 3rem; line-height: 1; font-weight: 600; color: var(--accent-primary); }
+.rate-value span { color: var(--text-muted); font-size: .875rem; }
+.rate-track { height: 10px; overflow: hidden; border-radius: 999px; background: #e7ece9; }
+.rate-track span { display: block; height: 100%; border-radius: inherit; background: var(--accent-primary); transition: width 400ms ease; }
+.rate-breakdown { display: flex; flex-direction: column; gap: 12px; margin-top: 24px; }
+.rate-breakdown div { display: flex; justify-content: space-between; gap: 12px; color: var(--text-secondary); font-size: .875rem; }
+.rate-breakdown span { display: inline-flex; align-items: center; gap: 8px; }
+.dot { width: 8px; height: 8px; display: inline-block; border-radius: 50%; }
+.dot-green { background: var(--status-success); }
+.dot-red { background: var(--status-error); }
+.rate-note { display: flex; align-items: center; gap: 6px; margin-top: 28px; padding-top: 14px; border-top: 1px solid var(--border-color); color: var(--text-muted); font-size: .75rem; }
+.spin { animation: spin 800ms linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
 .chart-frame { height: 290px; min-width: 0; }
 .chart-frame .recharts-text { fill: var(--text-muted); font-size: 12px; }
 .activity-list { display: flex; flex-direction: column; }
@@ -179,6 +199,7 @@ tbody tr:hover { background: #fafbfa; }
 @media (max-width: 1050px) {
   .stats-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .dashboard-grid { grid-template-columns: 1fr; }
+  .reports-grid { grid-template-columns: 1fr; }
 }
 
 @media (max-width: 680px) {
