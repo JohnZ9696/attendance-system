@@ -15,7 +15,7 @@
 
 
 const char* INTERNAL_API_KEY = "s5HpmgoZ4Wl5A9v8pJ6qLuAyWIrAZLU_nP3W3AeaUDc";
-const char* API_URL = "http://192.168.1.21:8000/internal/v1/cameras/";
+const char* API_URL = "http://192.168.1.213:8000/internal/v1/cameras/";
 const char* CAMERA_ID = "cam-01";
 
 
@@ -109,7 +109,7 @@ void connectWiFi() {
   WiFi.persistent(false);
   WiFi.setAutoReconnect(true);
   WiFi.setSleep(false);  // Giảm độ trễ gửi frame.
-  WiFi.begin("Di Tu", "68686868");
+  WiFi.begin("Minh Thu", "camsake");
 
   Serial.print("[WIFI] Connecting");
   unsigned long startedMs = millis();
@@ -484,7 +484,7 @@ void loop() {
       lastWifiRetryMs = millis();
       Serial.println("[WIFI] Reconnecting...");
       WiFi.disconnect();
-      WiFi.begin("Di Tu", "68686868");
+      WiFi.begin("Minh Thu", "camsaike");
     }
 
     delay(20);

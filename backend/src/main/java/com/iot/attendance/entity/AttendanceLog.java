@@ -2,6 +2,7 @@ package com.iot.attendance.entity;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
@@ -20,16 +21,17 @@ import java.util.UUID;
 @Getter
 @Setter
 public class AttendanceLog {
+
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
     private UUID id;
 
-    @ManyToOne
+    @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "student_id", nullable = false)
     private Student student;
 
-    @ManyToOne
-    @JoinColumn(name = "verification_id", unique = true)
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "verification_id")
     private VerificationLog verification;
 
     @Column(name = "attendance_date", nullable = false)
@@ -39,8 +41,11 @@ public class AttendanceLog {
     private OffsetDateTime checkTime;
 
     @Column(name = "status", nullable = false)
-    private String status; // ON_TIME or LATE
+    private String status;
 
     @Column(name = "late_minutes")
     private Integer lateMinutes;
+
+    @Column(name = "method", nullable = false)
+    private String method;
 }
