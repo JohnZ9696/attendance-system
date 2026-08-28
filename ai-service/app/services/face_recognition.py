@@ -104,7 +104,7 @@ def extract_face_embedding(
         area,
     )
 
-    # Ngưỡng 20 phù hợp hơn để kiểm thử bằng ảnh web/ESP32-CAM.
+    # Ngưỡng 50 phù hợp hơn để kiểm thử bằng ảnh web/ESP32-CAM.
     if require_enrollment_quality and blur_score < 50.0:
         return FaceEmbeddingResult(
             None,
