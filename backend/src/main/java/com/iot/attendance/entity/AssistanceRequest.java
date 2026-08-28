@@ -10,8 +10,6 @@ import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
-import lombok.Getter;
-import lombok.Setter;
 import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.UpdateTimestamp;
 
@@ -20,8 +18,6 @@ import java.util.UUID;
 
 @Entity
 @Table(name = "assistance_requests")
-@Getter
-@Setter
 public class AssistanceRequest {
 
     @Id
@@ -58,4 +54,24 @@ public class AssistanceRequest {
 
     @Column(name = "resolved_at")
     private OffsetDateTime resolvedAt;
+
+    public UUID getId() { return id; }
+    public void setId(UUID id) { this.id = id; }
+    public Student getStudent() { return student; }
+    public void setStudent(Student student) { this.student = student; }
+    public String getSource() { return source; }
+    public void setSource(String source) { this.source = source; }
+    public String getMessage() { return message; }
+    public void setMessage(String message) { this.message = message; }
+    public String getStatus() { return status; }
+    public void setStatus(String status) { this.status = status; }
+    public Boolean getNotificationSent() { return notificationSent; }
+    public void setNotificationSent(Boolean notificationSent) { this.notificationSent = notificationSent; }
+    public String getNotificationError() { return notificationError; }
+    public void setNotificationError(String notificationError) { this.notificationError = notificationError; }
+    public OffsetDateTime getCreatedAt() { return createdAt; }
+    public OffsetDateTime getUpdatedAt() { return updatedAt; }
+    public void setUpdatedAt(OffsetDateTime updatedAt) { this.updatedAt = updatedAt; }
+    public OffsetDateTime getResolvedAt() { return resolvedAt; }
+    public void setResolvedAt(OffsetDateTime resolvedAt) { this.resolvedAt = resolvedAt; }
 }

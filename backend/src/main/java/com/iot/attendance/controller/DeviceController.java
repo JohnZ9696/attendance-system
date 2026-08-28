@@ -3,7 +3,6 @@ package com.iot.attendance.controller;
 import com.iot.attendance.dto.RfidScanResponse;
 import com.iot.attendance.service.CheckInFlowService;
 import com.iot.attendance.service.SseEventService;
-import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import java.time.OffsetDateTime;
@@ -11,11 +10,15 @@ import java.util.Map;
 
 @RestController
 @RequestMapping("/api/v1/devices")
-@RequiredArgsConstructor
 public class DeviceController {
 
     private final CheckInFlowService orchestrationService;
     private final SseEventService sseEventService;
+
+    public DeviceController(CheckInFlowService orchestrationService, SseEventService sseEventService) {
+        this.orchestrationService = orchestrationService;
+        this.sseEventService = sseEventService;
+    }
 
     @PostMapping("/{deviceId}/rfid-scans")
     public ResponseEntity<?> handleScan(@PathVariable String deviceId, @RequestBody Map<String, String> payload) {

@@ -1,183 +1,136 @@
-import React, { useState, useEffect } from 'react';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell, AreaChart, Area } from 'recharts';
+import { useEffect, useState } from 'react';
+import { AlertCircle, CheckCircle2, Clock3, Download, RefreshCw, Users, XCircle } from 'lucide-react';
+import { Area, AreaChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { apiClient } from '../api/client';
-import { ErrorBanner } from '../components/ui';
+import { Button, ErrorBanner, PageHeader, Panel } from '../components/ui';
+import { SkeletonCard, SkeletonChart } from '../components/Skeleton';
 
-const COLORS = ['#10b981', '#f59e0b', '#ef4444'];
+const dateFormatter = new Intl.DateTimeFormat('vi-VN', { day: '2-digit', month: '2-digit' });
+
+function formatTrend(data = []) {
+  return data.map((item) => ({ ...item, label: dateFormatter.format(new Date(`${item.date}T00:00:00`)) }));
+}
 
 export default function Reports() {
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [downloading, setDownloading] = useState(false);
   const [error, setError] = useState('');
 
-  const loadData = async () => {
-    setLoading(true);
+  const loadData = async (silent = false) => {
+    if (silent) setRefreshing(true);
+    else setLoading(true);
     try {
-      const data = await apiClient.getAttendanceStats();
-      setStats(data);
+      setStats(await apiClient.getAttendanceStats());
+      setError('');
     } catch {
-      setError('Không thể tải báo cáo. Vui lòng thử lại.');
+      setError('Không thể tải báo cáo. Kiểm tra kết nối backend.');
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
   };
 
-  useEffect(() => {
-    loadData();
-  }, []);
+  useEffect(() => { loadData(); }, []);
 
   const handleDownload = async () => {
+    setDownloading(true);
     try {
       const blob = await apiClient.downloadReport();
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `attendance_report_${new Date().toISOString().split('T')[0]}.xlsx`;
-      document.body.appendChild(a);
-      a.click();
-      window.URL.revokeObjectURL(url);
-    } catch (err) {
-      alert("Failed to download report");
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `attendance_report_${new Date().toISOString().slice(0, 10)}.xlsx`;
+      link.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      setError('Không thể tải file Excel. Vui lòng thử lại.');
+    } finally {
+      setDownloading(false);
     }
   };
 
-  if (loading) return <div className="p-8 text-center text-[var(--text-muted)]">Đang tải dữ liệu...</div>;
-
-  const pieData = stats ? [
-    { name: 'Đúng giờ', value: stats.onTimeToday },
-    { name: 'Đi muộn', value: stats.lateToday },
-    { name: 'Vắng mặt', value: Math.max(0, stats.totalStudents - stats.presentToday) }
-  ] : [];
-
-  const trendData = stats?.trend || [];
+  const present = stats?.presentToday ?? 0;
+  const total = stats?.totalStudents ?? 0;
+  const attendanceRate = total ? Math.round((present / total) * 100) : 0;
+  const absent = Math.max(total - present, 0);
+  const trend = formatTrend(stats?.trend);
+  const cards = [
+    { label: 'Tổng sinh viên', value: total, icon: Users, tone: 'blue' },
+    { label: 'Có mặt hôm nay', value: present, icon: CheckCircle2, tone: 'green' },
+    { label: 'Đi muộn', value: stats?.lateToday ?? 0, icon: Clock3, tone: 'amber' },
+    { label: 'Chưa ghi nhận', value: absent, icon: XCircle, tone: 'red' },
+  ];
 
   return (
-    <div className="flex-col gap-8 pb-10">
-      <div className="flex items-center justify-between mb-4">
-        <div>
-          <h2 className="text-3xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-indigo-500 to-purple-600">Metric Dashboard</h2>
-          <p className="text-[var(--text-muted)] mt-1">Tổng quan dữ liệu điểm danh và phân tích xu hướng</p>
-        </div>
-        <button 
-          onClick={handleDownload}
-          className="px-6 py-2 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-lg shadow-lg hover:shadow-xl transition-all font-medium flex items-center gap-2"
-        >
-          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
-          Tải Excel Report
-        </button>
-      </div>
-
+    <div className="page-stack reports-page">
+      <PageHeader
+        title="Báo cáo & thống kê"
+        description="Theo dõi tình hình điểm danh theo ngày và xu hướng 7 ngày gần nhất"
+        actions={(
+          <>
+            <Button onClick={() => loadData(true)} disabled={loading || refreshing}>
+              <RefreshCw size={16} className={refreshing ? 'spin' : ''} /> Làm mới
+            </Button>
+            <Button variant="primary" onClick={handleDownload} disabled={downloading || loading}>
+              <Download size={16} /> {downloading ? 'Đang tải...' : 'Xuất Excel'}
+            </Button>
+          </>
+        )}
+      />
       <ErrorBanner message={error} onRetry={loadData} />
 
-      {stats && (
+      {loading ? (
+        <><div className="stats-grid"><SkeletonCard /><SkeletonCard /><SkeletonCard /><SkeletonCard /></div><Panel><SkeletonChart /></Panel></>
+      ) : stats && (
         <>
-          {/* Top KPI Cards with Glassmorphism */}
-          <div className="grid grid-cols-4 gap-6">
-            <div className="p-6 rounded-2xl border border-white/10 shadow-[0_8px_32px_0_rgba(31,38,135,0.07)] backdrop-blur-md bg-white/5 relative overflow-hidden">
-              <div className="absolute top-0 right-0 p-4 opacity-10">
-                 <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
-              </div>
-              <p className="text-[var(--text-muted)] font-medium mb-1 relative z-10">Tổng sinh viên</p>
-              <h3 className="text-4xl font-bold text-[var(--text-primary)] relative z-10">{stats.totalStudents}</h3>
-            </div>
-            
-            <div className="p-6 rounded-2xl border border-white/10 shadow-[0_8px_32px_0_rgba(31,38,135,0.07)] backdrop-blur-md bg-white/5 relative overflow-hidden">
-              <div className="absolute top-0 right-0 p-4 opacity-10 text-emerald-500">
-                 <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
-              </div>
-              <p className="text-[var(--text-muted)] font-medium mb-1 relative z-10">Có mặt hôm nay</p>
-              <h3 className="text-4xl font-bold text-emerald-500 relative z-10">{stats.presentToday}</h3>
-            </div>
-            
-            <div className="p-6 rounded-2xl border border-white/10 shadow-[0_8px_32px_0_rgba(31,38,135,0.07)] backdrop-blur-md bg-white/5 relative overflow-hidden">
-              <div className="absolute top-0 right-0 p-4 opacity-10 text-amber-500">
-                 <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
-              </div>
-              <p className="text-[var(--text-muted)] font-medium mb-1 relative z-10">Đi muộn</p>
-              <h3 className="text-4xl font-bold text-amber-500 relative z-10">{stats.lateToday}</h3>
-            </div>
-
-            <div className="p-6 rounded-2xl border border-white/10 shadow-[0_8px_32px_0_rgba(31,38,135,0.07)] backdrop-blur-md bg-white/5 relative overflow-hidden">
-              <div className="absolute top-0 right-0 p-4 opacity-10 text-rose-500">
-                 <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
-              </div>
-              <p className="text-[var(--text-muted)] font-medium mb-1 relative z-10">Vắng mặt</p>
-              <h3 className="text-4xl font-bold text-rose-500 relative z-10">{Math.max(0, stats.totalStudents - stats.presentToday)}</h3>
-            </div>
+          <div className="stats-grid">
+            {cards.map(({ label, value, icon: Icon, tone }) => (
+              <Panel className="stat-panel" key={label}>
+                <span className={`stat-icon tone-${tone}`}><Icon size={19} /></span>
+                <div><p>{label}</p><strong>{value}</strong></div>
+              </Panel>
+            ))}
           </div>
 
-          <div className="grid grid-cols-3 gap-6">
-            {/* Trend Chart */}
-            <div className="col-span-2 p-6 rounded-2xl border border-[var(--border-color)] bg-[var(--bg-surface)] shadow-sm">
-              <h3 className="text-lg font-bold mb-6 flex items-center gap-2">
-                 <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline></svg>
-                 Xu hướng 7 ngày
-              </h3>
-              <div style={{ height: '320px' }}>
-                <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={trendData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                    <defs>
-                      <linearGradient id="colorOnTime" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="#10b981" stopOpacity={0.3}/>
-                        <stop offset="95%" stopColor="#10b981" stopOpacity={0}/>
-                      </linearGradient>
-                      <linearGradient id="colorLate" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="#f59e0b" stopOpacity={0.3}/>
-                        <stop offset="95%" stopColor="#f59e0b" stopOpacity={0}/>
-                      </linearGradient>
-                    </defs>
-                    <CartesianGrid strokeDasharray="3 3" stroke="var(--border-color)" vertical={false} />
-                    <XAxis dataKey="date" stroke="var(--text-muted)" fontSize={12} tickMargin={10} />
-                    <YAxis stroke="var(--text-muted)" fontSize={12} />
-                    <Tooltip 
-                      contentStyle={{ backgroundColor: 'var(--bg-base)', borderColor: 'var(--border-color)', borderRadius: '12px', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
-                    />
-                    <Legend verticalAlign="top" height={36}/>
-                    <Area type="monotone" dataKey="onTime" name="Đúng giờ" stroke="#10b981" strokeWidth={3} fillOpacity={1} fill="url(#colorOnTime)" />
-                    <Area type="monotone" dataKey="late" name="Đi muộn" stroke="#f59e0b" strokeWidth={3} fillOpacity={1} fill="url(#colorLate)" />
-                  </AreaChart>
-                </ResponsiveContainer>
+          <div className="reports-grid">
+            <Panel className="reports-chart-panel">
+              <div className="panel-heading">
+                <div><h2>Xu hướng điểm danh</h2><p>Số lượt đúng giờ và đi muộn trong 7 ngày</p></div>
+                <span className="report-period">7 ngày</span>
               </div>
-            </div>
+              <div className="report-chart-frame">
+                {trend.length ? (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <AreaChart data={trend} margin={{ top: 8, right: 8, left: -20, bottom: 0 }}>
+                      <defs>
+                        <linearGradient id="reportOnTime" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#14745f" stopOpacity=".22" /><stop offset="100%" stopColor="#14745f" stopOpacity="0" /></linearGradient>
+                        <linearGradient id="reportLate" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#a9670e" stopOpacity=".18" /><stop offset="100%" stopColor="#a9670e" stopOpacity="0" /></linearGradient>
+                      </defs>
+                      <CartesianGrid stroke="var(--border-color)" strokeDasharray="3 3" vertical={false} />
+                      <XAxis dataKey="label" tickLine={false} axisLine={false} />
+                      <YAxis allowDecimals={false} tickLine={false} axisLine={false} />
+                      <Tooltip contentStyle={{ border: '1px solid var(--border-color)', borderRadius: 6, background: '#fff' }} />
+                      <Legend verticalAlign="top" height={34} />
+                      <Area type="monotone" dataKey="onTime" name="Đúng giờ" stroke="#14745f" fill="url(#reportOnTime)" strokeWidth={2} />
+                      <Area type="monotone" dataKey="late" name="Đi muộn" stroke="#a9670e" fill="url(#reportLate)" strokeWidth={2} />
+                    </AreaChart>
+                  </ResponsiveContainer>
+                ) : <div className="empty-state">Chưa có dữ liệu xu hướng.</div>}
+              </div>
+            </Panel>
 
-            {/* Pie Chart */}
-            <div className="p-6 rounded-2xl border border-[var(--border-color)] bg-[var(--bg-surface)] shadow-sm flex flex-col">
-              <h3 className="text-lg font-bold mb-2 flex items-center gap-2">
-                 <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21.21 15.89A10 10 0 1 1 8 2.83"></path><path d="M22 12A10 10 0 0 0 12 2v10z"></path></svg>
-                 Tỷ lệ hôm nay
-              </h3>
-              <div style={{ flex: 1, minHeight: '280px' }} className="flex items-center justify-center relative">
-                <ResponsiveContainer width="100%" height="100%">
-                  <PieChart>
-                    <Pie
-                      data={pieData}
-                      cx="50%"
-                      cy="50%"
-                      innerRadius={70}
-                      outerRadius={95}
-                      paddingAngle={6}
-                      dataKey="value"
-                      stroke="none"
-                      cornerRadius={6}
-                    >
-                      {pieData.map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                      ))}
-                    </Pie>
-                    <Tooltip 
-                      contentStyle={{ backgroundColor: 'var(--bg-base)', borderColor: 'var(--border-color)', borderRadius: '12px', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
-                      itemStyle={{ color: 'var(--text-primary)', fontWeight: 500 }}
-                    />
-                    <Legend verticalAlign="bottom" height={36} iconType="circle"/>
-                  </PieChart>
-                </ResponsiveContainer>
-                {/* Center text for donut chart */}
-                <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 text-center pointer-events-none mt-[-10px]">
-                   <p className="text-sm text-[var(--text-muted)]">Hiện diện</p>
-                   <p className="text-2xl font-bold">{stats.totalStudents > 0 ? Math.round((stats.presentToday / stats.totalStudents) * 100) : 0}%</p>
-                </div>
+            <Panel className="attendance-rate-panel">
+              <div className="panel-heading"><div><h2>Tỷ lệ hiện diện</h2><p>Tổng quan trong ngày</p></div></div>
+              <div className="rate-value"><strong>{attendanceRate}%</strong><span>có mặt</span></div>
+              <div className="rate-track"><span style={{ width: `${attendanceRate}%` }} /></div>
+              <div className="rate-breakdown">
+                <div><span><i className="dot dot-green" />Có mặt</span><strong>{present}</strong></div>
+                <div><span><i className="dot dot-red" />Chưa ghi nhận</span><strong>{absent}</strong></div>
               </div>
-            </div>
+              <div className="rate-note"><AlertCircle size={15} /> Dữ liệu tính theo ngày hiện tại</div>
+            </Panel>
           </div>
         </>
       )}
