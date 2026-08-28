@@ -29,7 +29,7 @@ constexpr char kWiFiPassword[] = WIFI_PASSWORD;
 constexpr char kDeviceId[]     = "door-01";
 
 constexpr char kServerCandidates[][40] = {
-  "http://192.168.1.253:8080/api/v1",
+  "http://192.168.2.26:8080/api/v1",
 };
 constexpr int kServerCandidatesCount = sizeof(kServerCandidates) / sizeof(kServerCandidates[0]);
 
@@ -50,6 +50,7 @@ MFRC522 rfid(RFID_SS_PIN, RFID_RST_PIN);
 
 enum class FeedbackState : uint8_t { 
   IDLE, 
+  PROCESSING,
   RFID_INVALID,
   CAMERA_OFFLINE,
   CAPTURE_TIMEOUT,
@@ -184,7 +185,7 @@ void sendHelpRequest() {
   http.begin(url);
   http.addHeader("Content-Type", "application/json");
 
-  StaticJsonDocument<200> doc;
+  JsonDocument doc;
   doc["deviceId"] = kDeviceId;
   doc["type"] = "HARDWARE_HELP_REQUEST";
   doc["source"] = "PUSH_BUTTON";
@@ -216,7 +217,7 @@ void pollEnrollmentCommand() {
   http.setTimeout(2000);
   int code = http.GET();
   if (code == HTTP_CODE_OK) {
-    StaticJsonDocument<200> doc;
+    JsonDocument doc;
     if (!deserializeJson(doc, http.getString())) {
       bool waiting = doc["status"].as<String>() == "WAITING";
       if (waiting != enrollmentMode) {
@@ -236,7 +237,7 @@ bool submitEnrollmentUid(const String& uid) {
   http.begin(apiBase + "/rfid-enrollment/scan");
   http.addHeader("Content-Type", "application/json");
   
-  StaticJsonDocument<200> doc;
+  JsonDocument doc;
   doc["uid"] = uid;
   String payload;
   serializeJson(doc, payload);
@@ -247,10 +248,14 @@ bool submitEnrollmentUid(const String& uid) {
   return code == HTTP_CODE_OK;
 }
 
-void sendRfidScan(const String& uid) {
+void sendRfidScanTask(void *pvParameters) {
+  String uid = *(String*)pvParameters;
+  delete (String*)pvParameters;
+
   const String apiBase = getApiBase();
   if (apiBase.length() == 0 || !connectToWifi()) {
     startFeedback(FeedbackState::CLOUD_WRITE_FAILED);
+    vTaskDelete(NULL);
     return;
   }
 
@@ -259,7 +264,7 @@ void sendRfidScan(const String& uid) {
   http.begin(url);
   http.addHeader("Content-Type", "application/json");
 
-  StaticJsonDocument<200> doc;
+  JsonDocument doc;
   doc["uid"] = uid;
   doc["deviceId"] = kDeviceId;
   doc["scannedAt"] = getIsoTimestamp();
@@ -271,7 +276,7 @@ void sendRfidScan(const String& uid) {
   int code = http.POST(payload);
   
   if (code > 0) {
-    StaticJsonDocument<200> resp;
+    JsonDocument resp;
     deserializeJson(resp, http.getString());
     String errorCode = resp["errorCode"].as<String>();
     
@@ -294,6 +299,13 @@ void sendRfidScan(const String& uid) {
     startFeedback(FeedbackState::CLOUD_WRITE_FAILED);
   }
   http.end();
+  vTaskDelete(NULL);
+}
+
+void sendRfidScan(const String& uid) {
+  startFeedback(FeedbackState::PROCESSING);
+  String* uidPtr = new String(uid);
+  xTaskCreate(sendRfidScanTask, "rfid_scan", 8192, uidPtr, 1, NULL);
 }
 
 // ----------------------------------------------------------------------------
@@ -311,8 +323,14 @@ void updateFeedback() {
 
   bool r_led = false, g_led = false, buzz = false;
   unsigned long duration = 2000UL; // default 2s
-
+  
   switch (feedbackState) {
+    case FeedbackState::PROCESSING:
+      // green LED + short beep (instant feedback)
+      g_led = true;
+      buzz = (elapsed < 100);
+      duration = 60000UL; // Up to 60s for face match timeout
+      break;
     case FeedbackState::RFID_INVALID:
       // red LED + short beep (100ms)
       r_led = true;
@@ -376,7 +394,7 @@ void updateFeedback() {
 // ----------------------------------------------------------------------------
 String readCardUid() {
   if (!rfidReady) return "";
-
+  
   // Chua co the moi: im lang va tiep tuc cho.
   if (!rfid.PICC_IsNewCardPresent()) return "";
 
@@ -385,7 +403,6 @@ String readCardUid() {
     Serial.println("[RFID] Card detected but UID read failed");
     return "";
   }
-
   String uid = "";
   for (byte i = 0; i < rfid.uid.size; i++) {
     if (rfid.uid.uidByte[i] < 0x10) uid += "0";
@@ -400,12 +417,14 @@ void handleRfidScan() {
 
   if (!rfidReady) return;
 
-  if (millis() - lastScanMs < CARD_COOLDOWN_MS) return;
+  if (feedbackState == FeedbackState::PROCESSING) return;
 
+  if (millis() - lastScanMs < CARD_COOLDOWN_MS) return;
+  
   const String uid = readCardUid();
   if (uid.length() == 0) return;
-
   lastScanMs = millis();
+
 
   rfid.PICC_HaltA();
   rfid.PCD_StopCrypto1();
@@ -413,7 +432,7 @@ void handleRfidScan() {
   lastScannedUid = uid;
   Serial.print("[SCAN] UID=");
   Serial.println(uid);
-
+  Serial.println(enrollmentMode);
   if (enrollmentMode) {
     if (submitEnrollmentUid(uid)) {
       enrollmentMode = false;
@@ -423,7 +442,6 @@ void handleRfidScan() {
     }
     return;
   }
-
   sendRfidScan(uid);
 }
 
@@ -440,6 +458,7 @@ void handleButton() {
   if ((millis() - lastButtonChangeMs) > BUTTON_DEBOUNCE_MS && reading != lastStableButtonState) {
     lastStableButtonState = reading;
     if (reading == LOW) { // Pressed
+      tone(BUTTON_PIN, 1000);
       if (millis() - lastButtonPressMs >= BUTTON_COOLDOWN_MS) {
         lastButtonPressMs = millis();
         Serial.println("[BUTTON] Help requested");
@@ -470,7 +489,7 @@ void setup() {
   rfid.PCD_DumpVersionToSerial();
 
   rfidReady = version != 0x00 && version != 0xFF;
-
+  Serial.println(rfidReady);
   if (rfidReady) {
     rfid.PCD_AntennaOn();
   } else {
