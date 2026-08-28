@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { NavLink, Outlet } from 'react-router-dom';
-import { Activity, LayoutDashboard, Users, Clock, BarChart3, Settings, Bell, User, Menu, X, ScanFace, CircleAlert, LifeBuoy } from 'lucide-react';
+import { Activity, LayoutDashboard, Users, Clock, BarChart3, Settings, Bell, User, Menu, X, ScanFace, CircleAlert, LifeBuoy, MessageSquare } from 'lucide-react';
 import './DashboardLayout.css';
 
 function LiveClock() {
@@ -22,7 +22,8 @@ export default function DashboardLayout() {
     { path: '/reports', label: 'Báo cáo & Thống kê', icon: BarChart3 },
     { path: '/monitoring', label: 'Giám sát trực tiếp', icon: Activity },
     { path: '/settings', label: 'Cài đặt hệ thống', icon: Settings },
-    { path: '/support', label: 'Hỗ trợ sự cố', icon: LifeBuoy }
+    { path: '/support', label: 'Hỗ trợ sự cố', icon: LifeBuoy },
+    { path: '/notify', label: 'Gửi thông báo', icon: MessageSquare }
   ];
 
   return (

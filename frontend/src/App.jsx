@@ -8,6 +8,7 @@ import History from './pages/History';
 import Reports from './pages/Reports';
 import Settings from './pages/Settings';
 import Support from './pages/Support';
+import Notify from './pages/Notify';
 
 function App() {
   return (
@@ -21,6 +22,7 @@ function App() {
           <Route path="reports" element={<Reports />} />
           <Route path="settings" element={<Settings />} />
           <Route path="support" element={<Support />} />
+          <Route path="notify" element={<Notify />} />
         </Route>
       </Routes>
     </BrowserRouter>

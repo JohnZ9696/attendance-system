@@ -67,5 +67,9 @@ export const apiClient = {
   downloadReport: () => request('/reports/attendance.xlsx'),
   startRfidEnrollment: () => request('/rfid-enrollment/start', { method: 'POST' }),
   getRfidEnrollment: () => request('/rfid-enrollment'),
-  cancelRfidEnrollment: () => request('/rfid-enrollment/cancel', { method: 'POST' })
+  cancelRfidEnrollment: () => request('/rfid-enrollment/cancel', { method: 'POST' }),
+  sendNotification: (message) => request('/notifications', {
+    method: 'POST',
+    body: JSON.stringify({ message })
+  })
 };
