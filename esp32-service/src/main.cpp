@@ -4,6 +4,9 @@
 #include <HTTPClient.h>
 #include <MFRC522.h>
 #include <ArduinoJson.h>
+#include <Wire.h>
+#include <Adafruit_GFX.h>
+#include <Adafruit_SSD1306.h>
 
 // ============================================================================
 // Pin Definitions (mandatory pinmap)
@@ -18,6 +21,16 @@ constexpr uint8_t BUZZER_PIN    = 25;
 constexpr uint8_t LED_GREEN_PIN = 26;
 constexpr uint8_t LED_RED_PIN   = 27;
 constexpr uint8_t BUTTON_PIN    = 32;  // INPUT_PULLUP: LOW = pressed
+
+// OLED I2C pins
+constexpr uint8_t OLED_SDA_PIN = 21;
+constexpr uint8_t OLED_SCL_PIN = 22;
+constexpr uint8_t OLED_ADDRESS = 0x3C;
+constexpr int OLED_WIDTH = 128;
+constexpr int OLED_HEIGHT = 64;
+
+Adafruit_SSD1306 oled(OLED_WIDTH, OLED_HEIGHT, &Wire, -1);
+bool oledReady = false;
 
 #include "wifi_config.h"
 
@@ -77,6 +90,103 @@ String lastScannedUid;
 bool enrollmentMode = false;
 unsigned long lastEnrollmentPollMs = 0UL;
 bool rfidReady = false;
+
+// ----------------------------------------------------------------------------
+// OLED helpers
+// ----------------------------------------------------------------------------
+void showOled(
+    const String& title,
+    const String& line1 = "",
+    const String& line2 = ""
+) {
+  if (!oledReady) return;
+
+  oled.clearDisplay();
+  oled.setTextColor(SSD1306_WHITE);
+
+  oled.setTextSize(1);
+  oled.setCursor(0, 0);
+  oled.println(title);
+
+  oled.drawLine(0, 11, 127, 11, SSD1306_WHITE);
+
+  oled.setCursor(0, 20);
+  oled.println(line1);
+
+  oled.setCursor(0, 36);
+  oled.println(line2);
+
+  oled.display();
+}
+
+void initOled() {
+  Wire.begin(OLED_SDA_PIN, OLED_SCL_PIN);
+
+  oledReady = oled.begin(
+      SSD1306_SWITCHCAPVCC,
+      OLED_ADDRESS
+  );
+
+  if (!oledReady) {
+    Serial.println("[OLED] Khong tim thay OLED tai 0x3C");
+    return;
+  }
+
+  oled.clearDisplay();
+  oled.display();
+  showOled("HE THONG", "Dang khoi dong...");
+}
+
+void showFeedbackOnOled(FeedbackState state) {
+  switch (state) {
+    case FeedbackState::RFID_INVALID:
+      showOled("THAT BAI", "THE KHONG HOP LE");
+      break;
+
+    case FeedbackState::CAMERA_OFFLINE:
+      showOled("THAT BAI", "CAMERA OFFLINE");
+      break;
+
+    case FeedbackState::CAPTURE_TIMEOUT:
+      showOled("THAT BAI", "CAPTURE TIMEOUT");
+      break;
+
+    case FeedbackState::LIVENESS_FAILED:
+      showOled("THAT BAI", "LIVENESS FAILED");
+      break;
+
+    case FeedbackState::FACE_BELOW_THRESHOLD:
+      showOled("THAT BAI", "FACE NOT MATCH");
+      break;
+
+    case FeedbackState::FACE_MATCH_TIMEOUT:
+      showOled("THAT BAI", "FACE TIMEOUT");
+      break;
+
+    case FeedbackState::ALREADY_CHECKED_IN:
+      showOled("THONG BAO", "DA DIEM DANH");
+      break;
+
+    case FeedbackState::CHECK_IN_ON_TIME:
+      showOled("THANH CONG", "DUNG GIO");
+      break;
+
+    case FeedbackState::CHECK_IN_LATE:
+      showOled("THANH CONG", "DI TRE");
+      break;
+
+    case FeedbackState::CLOUD_WRITE_FAILED:
+      showOled("LOI HE THONG", "KHONG GUI DUOC");
+      break;
+
+    case FeedbackState::INCIDENT_RECORDED:
+      showOled("HO TRO", "DA GUI YEU CAU");
+      break;
+
+    default:
+      break;
+  }
+}
 
 // ----------------------------------------------------------------------------
 // Low-level peripheral helpers
@@ -223,6 +333,12 @@ void pollEnrollmentCommand() {
       if (waiting != enrollmentMode) {
         enrollmentMode = waiting;
         Serial.println(enrollmentMode ? "[ENROLLMENT] Ready" : "[ENROLLMENT] Cancelled/completed");
+        
+        if (enrollmentMode) {
+          showOled("DANG KY THE", "Moi quet the");
+        } else {
+          showOled("SAN SANG", "Moi quet the");
+        }
       }
     }
   }
@@ -258,6 +374,12 @@ void sendRfidScanTask(void *pvParameters) {
     vTaskDelete(NULL);
     return;
   }
+
+  showOled(
+      "DANG XAC THUC",
+      "Vui long nhin cam",
+      "Xin cho..."
+  );
 
   HTTPClient http;
   String url = apiBase + "/devices/" + kDeviceId + "/rfid-scans";
@@ -315,6 +437,7 @@ void startFeedback(FeedbackState state) {
   feedbackState = state;
   stateStartMs  = millis();
   allOff();
+  showFeedbackOnOled(state);
 }
 
 void updateFeedback() {
@@ -386,6 +509,7 @@ void updateFeedback() {
   if (elapsed >= duration) {
     allOff();
     feedbackState = FeedbackState::IDLE;
+    showOled("SAN SANG", "Moi quet the");
   }
 }
 
@@ -433,7 +557,9 @@ void handleRfidScan() {
   Serial.print("[SCAN] UID=");
   Serial.println(uid);
   Serial.println(enrollmentMode);
+  
   if (enrollmentMode) {
+    showOled("DANG KY THE", uid, "Dang gui...");
     if (submitEnrollmentUid(uid)) {
       enrollmentMode = false;
       startFeedback(FeedbackState::CHECK_IN_ON_TIME);
@@ -442,6 +568,8 @@ void handleRfidScan() {
     }
     return;
   }
+  
+  showOled("DA DOC THE", uid, "Dang xu ly...");
   sendRfidScan(uid);
 }
 
@@ -481,6 +609,8 @@ void setup() {
   pinMode(BUTTON_PIN, INPUT_PULLUP);
   allOff();
 
+  initOled();
+
   SPI.begin(SPI_SCK_PIN, SPI_MISO_PIN, SPI_MOSI_PIN, RFID_SS_PIN);
   rfid.PCD_Init();
   delay(100);
@@ -497,10 +627,23 @@ void setup() {
     Serial.println("[RFID] Kiem tra SDA=GPIO16, RST=GPIO17, SCK=18, MISO=19, MOSI=23, 3.3V va GND");
   }
 
-  connectToWifi();
+  showOled("WIFI", "Dang ket noi...");
+  const bool wifiOk = connectToWifi();
+
+  if (wifiOk) {
+    showOled(
+        "WIFI OK",
+        WiFi.localIP().toString(),
+        "Dang dong bo gio"
+    );
+  } else {
+    showOled("WIFI LOI", "Kiem tra mang");
+  }
+
   syncTime();
 
   Serial.println("RFID Attendance System ready");
+  showOled("SAN SANG", "Moi quet the");
 }
 
 void loop() {
