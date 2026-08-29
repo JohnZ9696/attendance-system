@@ -71,7 +71,7 @@ export default function Monitoring() {
 
     refreshPreview();
 
-    const timer = setInterval(refreshPreview, 400);
+    const timer = setInterval(refreshPreview, 200);
 
     return () => clearInterval(timer);
   }, [cameraStatus.captureActive, aiBaseUrl]);
@@ -226,7 +226,7 @@ export default function Monitoring() {
 
             {cameraStatus.online &&
               cameraStatus.captureActive &&
-              !previewLoaded && (
+              !previewUrl && (
                 <div className="camera-placeholder">
                   Đang chờ frame từ ESP32-CAM...
                 </div>
