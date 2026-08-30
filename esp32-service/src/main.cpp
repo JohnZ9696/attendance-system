@@ -42,7 +42,7 @@ constexpr char kWiFiPassword[] = WIFI_PASSWORD;
 constexpr char kDeviceId[]     = "door-01";
 
 constexpr char kServerCandidates[][40] = {
-  "http://192.168.2.26:8080/api/v1",
+  "http://192.168.2.17:8080/api/v1",
 };
 constexpr int kServerCandidatesCount = sizeof(kServerCandidates) / sizeof(kServerCandidates[0]);
 
@@ -291,7 +291,7 @@ void sendHelpRequest() {
   }
 
   HTTPClient http;
-  String url = apiBase + "/devices/" + kDeviceId + "/incidents";
+  String url = apiBase + "/assistance";
   http.begin(url);
   http.addHeader("Content-Type", "application/json");
 
@@ -306,6 +306,10 @@ void sendHelpRequest() {
 
   http.setTimeout(5000);
   int code = http.POST(payload);
+  String responseBody = http.getString();
+
+  Serial.printf("[HELP] POST %s -> %d\n", url.c_str(), code);
+  Serial.println(responseBody);
   http.end();
 
   if (code == 200 || code == 201) {
@@ -374,12 +378,6 @@ void sendRfidScanTask(void *pvParameters) {
     vTaskDelete(NULL);
     return;
   }
-
-  showOled(
-      "DANG XAC THUC",
-      "Vui long nhin cam",
-      "Xin cho..."
-  );
 
   HTTPClient http;
   String url = apiBase + "/devices/" + kDeviceId + "/rfid-scans";

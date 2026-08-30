@@ -1,6 +1,8 @@
 package com.iot.attendance.controller;
 
+import com.iot.attendance.dto.AssistanceCreateRequest;
 import com.iot.attendance.service.AssistanceService;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import java.util.Map;
@@ -14,6 +16,13 @@ public class AssistanceController {
 
     public AssistanceController(AssistanceService service) {
         this.service = service;
+    }
+
+    @PostMapping
+    public ResponseEntity<?> create(@RequestBody AssistanceCreateRequest request) {
+        return ResponseEntity
+                .status(HttpStatus.CREATED)
+                .body(service.create(request));
     }
 
     @GetMapping
