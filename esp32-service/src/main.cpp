@@ -586,7 +586,7 @@ void handleButton() {
   if ((millis() - lastButtonChangeMs) > BUTTON_DEBOUNCE_MS && reading != lastStableButtonState) {
     lastStableButtonState = reading;
     if (reading == LOW) { // Pressed
-      tone(BUTTON_PIN, 1000);
+      tone(BUZZER_PIN, 1000);
       if (millis() - lastButtonPressMs >= BUTTON_COOLDOWN_MS) {
         lastButtonPressMs = millis();
         Serial.println("[BUTTON] Help requested");

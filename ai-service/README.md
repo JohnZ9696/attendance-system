@@ -57,8 +57,8 @@ Open `.env` in your text editor and ensure you provide values for at least:
 python -m app.main
 ```
 
-The service listens on `http://localhost:8000`. Interactive API documentation is
-available at `http://localhost:8000/docs`.
+The service listens on `http://192.168.2.26:8000`. Interactive API documentation
+is available at `http://192.168.2.26:8000/docs`.
 
 ## Endpoints
 
