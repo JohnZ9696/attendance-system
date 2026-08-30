@@ -25,7 +25,7 @@ source .venv/bin/activate
 
 **On Windows (Command Prompt):**
 ```cmd
-.venv\Scripts\activate.
+.venv\Scripts\activate.bat
 ```
 
 **On Windows (PowerShell):**
