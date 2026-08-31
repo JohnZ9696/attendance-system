@@ -145,10 +145,12 @@ void showFeedbackOnOled(FeedbackState state) {
   switch (state) {
     case FeedbackState::RFID_INVALID:
       showOled("THAT BAI", "THE KHONG HOP LE");
+      digitalWrite(LED_RED_PIN, HIGH);
       break;
 
     case FeedbackState::FACE_NOT_ENROLLED:
       showOled("THAT BAI", "CHUA DANG KY MAT");
+      digitalWrite(LED_RED_PIN, HIGH);
       break;
 
     case FeedbackState::CAMERA_OFFLINE:
@@ -157,26 +159,32 @@ void showFeedbackOnOled(FeedbackState state) {
 
     case FeedbackState::CAPTURE_TIMEOUT:
       showOled("THAT BAI", "CAPTURE TIMEOUT");
+      digitalWrite(LED_RED_PIN, HIGH);
       break;
 
     case FeedbackState::LIVENESS_FAILED:
       showOled("THAT BAI", "LIVENESS FAILED");
+      digitalWrite(LED_RED_PIN, HIGH);
       break;
 
     case FeedbackState::FACE_BELOW_THRESHOLD:
       showOled("THAT BAI", "FACE NOT MATCH");
+      digitalWrite(LED_RED_PIN, HIGH);
       break;
 
     case FeedbackState::FACE_MATCH_TIMEOUT:
       showOled("THAT BAI", "FACE TIMEOUT");
+      digitalWrite(LED_RED_PIN, HIGH);
       break;
 
     case FeedbackState::MULTIPLE_FACES:
       showOled("THAT BAI", "NHIEU KHUON MAT");
+      digitalWrite(LED_RED_PIN, HIGH);
       break;
 
     case FeedbackState::ALREADY_CHECKED_IN:
       showOled("THONG BAO", "DA DIEM DANH");
+      digitalWrite(LED_RED_PIN, HIGH);
       break;
 
     case FeedbackState::CHECK_IN_ON_TIME:
@@ -189,6 +197,7 @@ void showFeedbackOnOled(FeedbackState state) {
 
     case FeedbackState::CLOUD_WRITE_FAILED:
       showOled("LOI HE THONG", "KHONG GUI DUOC");
+      digitalWrite(LED_RED_PIN, HIGH);
       break;
 
     case FeedbackState::INCIDENT_RECORDED:
@@ -198,12 +207,17 @@ void showFeedbackOnOled(FeedbackState state) {
     default:
       break;
   }
+  delay(1000);
+  digitalWrite(LED_RED_PIN, LOW);
 }
 
 // ----------------------------------------------------------------------------
 // Low-level peripheral helpers
 // ----------------------------------------------------------------------------
-void setBuzzer(bool on) { digitalWrite(BUZZER_PIN, on ? HIGH : LOW); }
+void setBuzzer(bool on, uint16_t freq = 1000) {
+  if (on) tone(BUZZER_PIN, freq);
+  else    noTone(BUZZER_PIN);
+}
 
 void allOff() {
   digitalWrite(LED_GREEN_PIN, LOW);
@@ -567,6 +581,7 @@ String readCardUid() {
   // Co the nhung khong doc duoc UID.
   if (!rfid.PICC_ReadCardSerial()) {
     Serial.println("[RFID] Card detected but UID read failed");
+    showOled("LOI RFID", "Doc UID that bai");
     return "";
   }
   String uid = "";
@@ -591,6 +606,8 @@ void handleRfidScan() {
   if (uid.length() == 0) return;
   lastScanMs = millis();
 
+  // Immediate audio feedback on successful card read
+  tone(BUZZER_PIN, 1500, 1000);
 
   rfid.PICC_HaltA();
   rfid.PCD_StopCrypto1();
@@ -607,6 +624,9 @@ void handleRfidScan() {
       startFeedback(FeedbackState::CHECK_IN_ON_TIME);
     } else {
       startFeedback(FeedbackState::CLOUD_WRITE_FAILED);
+      digitalWrite(LED_RED_PIN, HIGH);
+      delay(1000);
+      digitalWrite(LED_RED_PIN, LOW);
     }
     return;
   }
@@ -628,7 +648,7 @@ void handleButton() {
   if ((millis() - lastButtonChangeMs) > BUTTON_DEBOUNCE_MS && reading != lastStableButtonState) {
     lastStableButtonState = reading;
     if (reading == LOW) { // Pressed
-      tone(BUZZER_PIN, 1000);
+      setBuzzer(true, 1000);
       if (millis() - lastButtonPressMs >= BUTTON_COOLDOWN_MS) {
         lastButtonPressMs = millis();
         Serial.println("[BUTTON] Help requested");
@@ -666,7 +686,9 @@ void setup() {
     rfid.PCD_AntennaOn();
   } else {
     Serial.println("[RFID] ERROR: Khong giao tiep duoc voi RC522");
+    showOled("LOI RFID", "RC522 loi");
     Serial.println("[RFID] Kiem tra SDA=GPIO16, RST=GPIO17, SCK=18, MISO=19, MOSI=23, 3.3V va GND");
+    showOled("RFID", "Kiem tra day noi");
   }
 
   showOled("WIFI", "Dang ket noi...");
