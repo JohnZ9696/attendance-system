@@ -54,6 +54,7 @@ constexpr unsigned long BUTTON_COOLDOWN_MS = 2000UL;  // min gap between help bu
 constexpr unsigned long CARD_COOLDOWN_MS   = 500UL;   // min gap between reads
 constexpr unsigned long ENROLLMENT_POLL_MS = 1000UL;  // backend command polling
 constexpr unsigned long HEARTBEAT_INTERVAL_MS = 60000UL; // Heartbeat interval
+constexpr unsigned long OLED_NOTIFY_POLL_MS = 2000UL;  // OLED notification polling
 constexpr int           WIFI_TIMEOUT_S     = 15;      // max WiFi connect wait
 
 // ============================================================================
@@ -89,6 +90,7 @@ unsigned long lastHeartbeatMs    = 0UL;
 String lastScannedUid;
 bool enrollmentMode = false;
 unsigned long lastEnrollmentPollMs = 0UL;
+unsigned long lastOledNotifyPollMs = 0UL;
 bool rfidReady = false;
 
 // ----------------------------------------------------------------------------
@@ -341,6 +343,37 @@ void pollEnrollmentCommand() {
         if (enrollmentMode) {
           showOled("DANG KY THE", "Moi quet the");
         } else {
+          showOled("SAN SANG", "Moi quet the");
+        }
+      }
+    }
+  }
+  http.end();
+}
+
+void pollOledNotification() {
+  if (millis() - lastOledNotifyPollMs < OLED_NOTIFY_POLL_MS || WiFi.status() != WL_CONNECTED) return;
+  lastOledNotifyPollMs = millis();
+
+  const String apiBase = getApiBase();
+  if (apiBase.length() == 0) return;
+
+  HTTPClient http;
+  http.begin(apiBase + "/notifications/pending");
+  http.setTimeout(2000);
+  int code = http.GET();
+  if (code == HTTP_CODE_OK) {
+    JsonDocument doc;
+    String body = http.getString();
+    if (!deserializeJson(doc, body)) {
+      String msg = doc["message"].as<String>();
+      if (msg.length() > 0) {
+        Serial.print("[OLED] Notification: ");
+        Serial.println(msg);
+        // Show for 5 s then return to ready screen
+        showOled("THONG BAO", msg);
+        delay(5000);
+        if (feedbackState == FeedbackState::IDLE) {
           showOled("SAN SANG", "Moi quet the");
         }
       }
@@ -647,6 +680,7 @@ void setup() {
 void loop() {
   handleButton();
   pollEnrollmentCommand();
+  pollOledNotification();
   handleRfidScan();
   updateFeedback();
   sendHeartbeat();
