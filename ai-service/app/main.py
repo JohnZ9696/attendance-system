@@ -31,7 +31,7 @@ if __name__ == "__main__":
 
     uvicorn.run(
         "app.main:app",
-        host=os.getenv("AI_SERVICE_HOST", "192.168.2.26"),
+        host=os.getenv("AI_SERVICE_HOST", "172.20.10.5"),
         port=int(os.getenv("AI_SERVICE_PORT", "8000")),
         reload=os.getenv("AI_SERVICE_RELOAD", "false").lower() == "true",
     )
