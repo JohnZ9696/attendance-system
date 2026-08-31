@@ -34,6 +34,10 @@ public class DeviceController {
             if (response.errorCode() != null && !"ALREADY_CHECKED_IN".equals(response.errorCode()) && !"VERIFIED".equals(response.errorCode())) {
                 int status = switch (response.errorCode()) {
                     case "RFID_INVALID", "STUDENT_NOT_FOUND_OR_INACTIVE" -> 404;
+                    case "FACE_NOT_ENROLLED", "MULTIPLE_FACES",
+                         "CAMERA_OFFLINE", "CAPTURE_TIMEOUT",
+                         "LIVENESS_FAILED", "FACE_BELOW_THRESHOLD",
+                         "FACE_MATCH_TIMEOUT" -> 422;
                     default -> 422;
                 };
                 return ResponseEntity.status(status).body(response);
