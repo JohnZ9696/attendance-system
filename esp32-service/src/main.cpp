@@ -1,6 +1,8 @@
 #include <Arduino.h>
 #include <SPI.h>
 #include <WiFi.h>
+#include <WiFiUdp.h>
+#include <ESPmDNS.h>
 #include <HTTPClient.h>
 #include <MFRC522.h>
 #include <ArduinoJson.h>
@@ -41,10 +43,7 @@ constexpr char kWiFiSsid[]     = WIFI_SSID;
 constexpr char kWiFiPassword[] = WIFI_PASSWORD;
 constexpr char kDeviceId[]     = "door-01";
 
-constexpr char kServerCandidates[][40] = {
-  "http://172.20.10.5:8080/api/v1",
-};
-constexpr int kServerCandidatesCount = sizeof(kServerCandidates) / sizeof(kServerCandidates[0]);
+constexpr char kMdnsHostname[] = "attendance";
 
 // ============================================================================
 // Timing / Behavior constants
@@ -279,14 +278,79 @@ String getIsoTimestamp() {
 // HTTP helpers
 // ----------------------------------------------------------------------------
 String workingBase = "";
+IPAddress workingNetworkIp(0, 0, 0, 0);
+
+constexpr uint16_t DISCOVERY_PORT = 4210;
+
+bool discoverServer(IPAddress& outIp, uint16_t& outPort) {
+  WiFiUDP udp;
+  if (!udp.begin(0)) return false;
+
+  IPAddress localIp = WiFi.localIP();
+  IPAddress mask = WiFi.subnetMask();
+  IPAddress broadcast(
+      localIp[0] | static_cast<uint8_t>(~mask[0]),
+      localIp[1] | static_cast<uint8_t>(~mask[1]),
+      localIp[2] | static_cast<uint8_t>(~mask[2]),
+      localIp[3] | static_cast<uint8_t>(~mask[3]));
+  const char request[] = "ATTENDANCE_DISCOVER_V1";
+
+  for (int attempt = 0; attempt < 3; attempt++) {
+    udp.beginPacket(broadcast, DISCOVERY_PORT);
+    udp.write(reinterpret_cast<const uint8_t*>(request), sizeof(request) - 1);
+    udp.endPacket();
+
+    const unsigned long deadline = millis() + 700;
+    while ((long)(deadline - millis()) > 0) {
+      int size = udp.parsePacket();
+      if (size > 0) {
+        char response[64] = {};
+        int read = udp.read(response, sizeof(response) - 1);
+        if (read > 0 && strncmp(response, "ATTENDANCE_SERVER_V1:", 21) == 0) {
+          outIp = udp.remoteIP();
+          outPort = static_cast<uint16_t>(atoi(response + 21));
+          udp.stop();
+          return outPort > 0;
+        }
+      }
+      delay(10);
+    }
+  }
+
+  udp.stop();
+  return false;
+}
 
 String getApiBase() {
-  if (workingBase.length() > 0) return workingBase;
   if (!connectToWifi()) return "";
-  
-  // In a real scenario, we might test candidates here.
-  // For simplicity, we just use the first.
-  workingBase = String(kServerCandidates[0]);
+  if (workingNetworkIp != WiFi.localIP()) {
+    workingBase = "";
+    workingNetworkIp = WiFi.localIP();
+  }
+  if (workingBase.length() > 0) return workingBase;
+
+  IPAddress serverIp(0, 0, 0, 0);
+  uint16_t serverPort = 8080;
+
+  Serial.println("[DISCOVERY] Dang tim Spring Boot qua UDP...");
+  if (discoverServer(serverIp, serverPort)) {
+    Serial.printf("[DISCOVERY] Server %s:%u\n", serverIp.toString().c_str(), serverPort);
+  } else if (MDNS.begin(kMdnsHostname)) {
+    serverIp = MDNS.queryHost("attendance", 1000);
+    MDNS.end();
+    if (serverIp == IPAddress(0, 0, 0, 0)) {
+      Serial.println("[DISCOVERY] Khong tim thay server");
+      return "";
+    }
+    Serial.printf("[MDNS] attendance.local -> %s\n", serverIp.toString().c_str());
+  } else {
+    Serial.println("[DISCOVERY] Khong tim thay server");
+    return "";
+  }
+
+  char buf[128];
+  snprintf(buf, sizeof buf, "http://%s:%u/api/v1", serverIp.toString().c_str(), serverPort);
+  workingBase = String(buf);
   return workingBase;
 }
 
