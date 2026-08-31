@@ -1,0 +1,73 @@
+{
+  "version": 1,
+  "editor": "wokwi",
+  "parts": [
+    {
+      "type": "wokwi-breadboard-half",
+      "id": "bb1",
+      "top": 183.55,
+      "left": 328.7,
+      "rotate": 90,
+      "attrs": {}
+    },
+    {
+      "type": "board-esp32-devkit-c-v4",
+      "id": "esp1",
+      "top": 225.85,
+      "left": 128.64,
+      "attrs": {}
+    },
+    { "type": "board-mfrc522", "id": "rfid1", "top": 60, "left": 127.24, "attrs": {} },
+    {
+      "type": "wokwi-buzzer",
+      "id": "bz1",
+      "top": 461.35,
+      "left": 15.5,
+      "rotate": 270,
+      "attrs": { "volume": "0.1" }
+    },
+    {
+      "type": "wokwi-led",
+      "id": "led1",
+      "top": 330.65,
+      "left": 29.2,
+      "rotate": 270,
+      "attrs": { "color": "green" }
+    },
+    {
+      "type": "wokwi-led",
+      "id": "led2",
+      "top": 388.25,
+      "left": 10,
+      "rotate": 270,
+      "attrs": { "color": "red" }
+    },
+    {
+      "type": "wokwi-pushbutton",
+      "id": "btn1",
+      "top": 203.25,
+      "left": 18.2,
+      "rotate": 90,
+      "attrs": { "color": "green", "xray": "1" }
+    }
+  ],
+  "connections": [
+    [ "rfid1:MISO", "esp1:19", "green", [ "h115.2", "v192", "h-9.6" ] ],
+    [ "rfid1:MOSI", "esp1:23", "green", [ "h134.4", "v144", "h-9.6" ] ],
+    [ "rfid1:SCK", "esp1:18", "green", [ "h153.6", "v220.8", "h-19.2" ] ],
+    [ "rfid1:SDA", "esp1:5", "green", [ "h163.2", "v240" ] ],
+    [ "rfid1:3.3V", "esp1:3V3", "green", [ "h-19.2", "v86.4", "h-9.6" ] ],
+    [ "bz1:2", "esp1:25", "green", [ "v-38", "v-134.4" ] ],
+    [ "bz1:1", "bb1:bn.25", "green", [ "h307.2" ] ],
+    [ "esp1:GND.2", "bb1:bn.10", "black", [ "v0" ] ],
+    [ "esp1:26", "led1:A", "green", [ "h0" ] ],
+    [ "led1:C", "bb1:bn.21", "green", [ "h0", "v95.6", "h288", "v-67.2" ] ],
+    [ "esp1:27", "led2:A", "green", [ "h-28.65", "v57.6" ] ],
+    [ "led2:C", "bb1:bn.20", "green", [ "h0", "v28.4", "h268.8", "v-76.8" ] ],
+    [ "esp1:32", "btn1:1.r", "green", [ "h-76.65" ] ],
+    [ "btn1:2.l", "bb1:bn.2", "green", [ "v-170", "h358", "v19.2" ] ],
+    [ "rfid1:GND", "bb1:bn.3", "black", [ "h230.4", "v28.8", "h37.1" ] ],
+    [ "rfid1:RST", "esp1:17", "green", [ "h105.6", "v9.6" ] ]
+  ],
+  "dependencies": {}
+}
