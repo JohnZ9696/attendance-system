@@ -571,7 +571,7 @@ void updateFeedback() {
       // green LED + short beep (instant feedback)
       g_led = true;
       buzz = (elapsed < 100);
-      duration = 60000UL; // Up to 60s for face match timeout
+      duration = 30000UL; // Up to 60s for face match timeout
       break;
 
     // ===== TẤT CẢ LỖI -> ĐỎ =====
@@ -589,17 +589,20 @@ void updateFeedback() {
     case FeedbackState::FACE_BELOW_THRESHOLD:   // Sai khuôn mặt
       r_led = true;
       buzz = (elapsed < 1000);                  // 1 beep dài
+      showOled("KHUON MAT KHONG TRUNG KHOP", "Moi quet the");
       break;
 
     // ===== THÀNH CÔNG -> XANH =====
     case FeedbackState::ALREADY_CHECKED_IN:
       g_led = (elapsed % 500) < 250;            // Xanh nháy
       duration = 2000UL;
+      showOled("DA DIEM DANH", "Di dung gio! Xin moi vao");
       break;
 
     case FeedbackState::CHECK_IN_ON_TIME:
       g_led = true;
       buzz = (elapsed < 100);                   // 1 beep ngắn
+      showOled("DIEM DANH THANH CONG", "Xin moi vao");
       break;
 
     case FeedbackState::CHECK_IN_LATE:
@@ -671,7 +674,7 @@ void handleRfidScan() {
   lastScanMs = millis();
 
   // Immediate audio feedback on successful card read
-  tone(BUZZER_PIN, 1500, 1000);
+  tone(BUZZER_PIN, 1500, 500);
 
   rfid.PICC_HaltA();
   rfid.PCD_StopCrypto1();
