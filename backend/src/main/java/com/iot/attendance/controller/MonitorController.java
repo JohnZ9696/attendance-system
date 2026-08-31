@@ -16,7 +16,7 @@ public class MonitorController {
         this.service = service;
     }
 
-    @GetMapping("/events")
+    @GetMapping(value = "/events", produces = "text/event-stream")
     public SseEmitter streamEvents() {
         return service.subscribe();
     }

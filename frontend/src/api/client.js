@@ -1,4 +1,4 @@
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080/api/v1';
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://172.20.10.5:8080/api/v1';
 
 async function request(path, options = {}) {
   const headers = {
@@ -67,5 +67,9 @@ export const apiClient = {
   downloadReport: () => request('/reports/attendance.xlsx'),
   startRfidEnrollment: () => request('/rfid-enrollment/start', { method: 'POST' }),
   getRfidEnrollment: () => request('/rfid-enrollment'),
-  cancelRfidEnrollment: () => request('/rfid-enrollment/cancel', { method: 'POST' })
+  cancelRfidEnrollment: () => request('/rfid-enrollment/cancel', { method: 'POST' }),
+  sendNotification: (message) => request('/notifications', {
+    method: 'POST',
+    body: JSON.stringify({ message })
+  })
 };

@@ -14,7 +14,7 @@ public class SseEventService {
     private final List<SseEmitter> emitters = new CopyOnWriteArrayList<>();
 
     public SseEmitter subscribe() {
-        SseEmitter emitter = new SseEmitter(0L);
+        SseEmitter emitter = new SseEmitter(300_000L); // 5 minute keepalive; prevents broken-pipe on stale connections
         emitters.add(emitter);
 
         emitter.onCompletion(() -> emitters.remove(emitter));
@@ -26,9 +26,8 @@ public class SseEventService {
                     .data(Map.of(
                             "type", "connected",
                             "data", Map.of("status", "CONNECTED"))));
-        } catch (IOException exception) {
+        } catch (Exception exception) {
             emitters.remove(emitter);
-            emitter.completeWithError(exception);
         }
 
         return emitter;
@@ -49,7 +48,7 @@ public class SseEventService {
                         SseEmitter.event()
                                 .data(payload)
                 );
-            } catch (IOException exception) {
+            } catch (Exception exception) {
                 deadEmitters.add(emitter);
             }
         }

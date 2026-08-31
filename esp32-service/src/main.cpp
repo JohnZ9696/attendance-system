@@ -4,7 +4,9 @@
 #include <HTTPClient.h>
 #include <MFRC522.h>
 #include <ArduinoJson.h>
-#include <fstream>
+#include <Wire.h>
+#include <Adafruit_GFX.h>
+#include <Adafruit_SSD1306.h>
 
 // ============================================================================
 // Pin Definitions (mandatory pinmap)
@@ -20,6 +22,16 @@ constexpr uint8_t LED_GREEN_PIN = 26;
 constexpr uint8_t LED_RED_PIN   = 27;
 constexpr uint8_t BUTTON_PIN    = 32;  // INPUT_PULLUP: LOW = pressed
 
+// OLED I2C pins
+constexpr uint8_t OLED_SDA_PIN = 21;
+constexpr uint8_t OLED_SCL_PIN = 22;
+constexpr uint8_t OLED_ADDRESS = 0x3C;
+constexpr int OLED_WIDTH = 128;
+constexpr int OLED_HEIGHT = 64;
+
+Adafruit_SSD1306 oled(OLED_WIDTH, OLED_HEIGHT, &Wire, -1);
+bool oledReady = false;
+
 #include "wifi_config.h"
 
 // ============================================================================
@@ -30,7 +42,7 @@ constexpr char kWiFiPassword[] = WIFI_PASSWORD;
 constexpr char kDeviceId[]     = "door-01";
 
 constexpr char kServerCandidates[][40] = {
-  "http://192.168.1.184:8080/api/v1",
+  "http://172.20.10.5:8080/api/v1",
 };
 constexpr int kServerCandidatesCount = sizeof(kServerCandidates) / sizeof(kServerCandidates[0]);
 
@@ -51,6 +63,7 @@ MFRC522 rfid(RFID_SS_PIN, RFID_RST_PIN);
 
 enum class FeedbackState : uint8_t { 
   IDLE, 
+  PROCESSING,
   RFID_INVALID,
   CAMERA_OFFLINE,
   CAPTURE_TIMEOUT,
@@ -76,6 +89,104 @@ unsigned long lastHeartbeatMs    = 0UL;
 String lastScannedUid;
 bool enrollmentMode = false;
 unsigned long lastEnrollmentPollMs = 0UL;
+bool rfidReady = false;
+
+// ----------------------------------------------------------------------------
+// OLED helpers
+// ----------------------------------------------------------------------------
+void showOled(
+    const String& title,
+    const String& line1 = "",
+    const String& line2 = ""
+) {
+  if (!oledReady) return;
+
+  oled.clearDisplay();
+  oled.setTextColor(SSD1306_WHITE);
+
+  oled.setTextSize(1);
+  oled.setCursor(0, 0);
+  oled.println(title);
+
+  oled.drawLine(0, 11, 127, 11, SSD1306_WHITE);
+
+  oled.setCursor(0, 20);
+  oled.println(line1);
+
+  oled.setCursor(0, 36);
+  oled.println(line2);
+
+  oled.display();
+}
+
+void initOled() {
+  Wire.begin(OLED_SDA_PIN, OLED_SCL_PIN);
+
+  oledReady = oled.begin(
+      SSD1306_SWITCHCAPVCC,
+      OLED_ADDRESS
+  );
+
+  if (!oledReady) {
+    Serial.println("[OLED] Khong tim thay OLED tai 0x3C");
+    return;
+  }
+
+  oled.clearDisplay();
+  oled.display();
+  showOled("HE THONG", "Dang khoi dong...");
+}
+
+void showFeedbackOnOled(FeedbackState state) {
+  switch (state) {
+    case FeedbackState::RFID_INVALID:
+      showOled("THAT BAI", "THE KHONG HOP LE");
+      break;
+
+    case FeedbackState::CAMERA_OFFLINE:
+      showOled("THAT BAI", "CAMERA OFFLINE");
+      break;
+
+    case FeedbackState::CAPTURE_TIMEOUT:
+      showOled("THAT BAI", "CAPTURE TIMEOUT");
+      break;
+
+    case FeedbackState::LIVENESS_FAILED:
+      showOled("THAT BAI", "LIVENESS FAILED");
+      break;
+
+    case FeedbackState::FACE_BELOW_THRESHOLD:
+      showOled("THAT BAI", "FACE NOT MATCH");
+      break;
+
+    case FeedbackState::FACE_MATCH_TIMEOUT:
+      showOled("THAT BAI", "FACE TIMEOUT");
+      break;
+
+    case FeedbackState::ALREADY_CHECKED_IN:
+      showOled("THONG BAO", "DA DIEM DANH");
+      break;
+
+    case FeedbackState::CHECK_IN_ON_TIME:
+      showOled("THANH CONG", "DUNG GIO");
+      break;
+
+    case FeedbackState::CHECK_IN_LATE:
+      showOled("THANH CONG", "DI TRE");
+      break;
+
+    case FeedbackState::CLOUD_WRITE_FAILED:
+      showOled("LOI HE THONG", "KHONG GUI DUOC");
+      break;
+
+    case FeedbackState::INCIDENT_RECORDED:
+      showOled("HO TRO", "DA GUI YEU CAU");
+      break;
+
+    default:
+      break;
+  }
+}
 
 // ----------------------------------------------------------------------------
 // Low-level peripheral helpers
@@ -180,11 +291,11 @@ void sendHelpRequest() {
   }
 
   HTTPClient http;
-  String url = apiBase + "/devices/" + kDeviceId + "/incidents";
+  String url = apiBase + "/assistance";
   http.begin(url);
   http.addHeader("Content-Type", "application/json");
 
-  StaticJsonDocument<200> doc;
+  JsonDocument doc;
   doc["deviceId"] = kDeviceId;
   doc["type"] = "HARDWARE_HELP_REQUEST";
   doc["source"] = "PUSH_BUTTON";
@@ -195,6 +306,10 @@ void sendHelpRequest() {
 
   http.setTimeout(5000);
   int code = http.POST(payload);
+  String responseBody = http.getString();
+
+  Serial.printf("[HELP] POST %s -> %d\n", url.c_str(), code);
+  Serial.println(responseBody);
   http.end();
 
   if (code == 200 || code == 201) {
@@ -216,12 +331,18 @@ void pollEnrollmentCommand() {
   http.setTimeout(2000);
   int code = http.GET();
   if (code == HTTP_CODE_OK) {
-    StaticJsonDocument<200> doc;
+    JsonDocument doc;
     if (!deserializeJson(doc, http.getString())) {
       bool waiting = doc["status"].as<String>() == "WAITING";
       if (waiting != enrollmentMode) {
         enrollmentMode = waiting;
         Serial.println(enrollmentMode ? "[ENROLLMENT] Ready" : "[ENROLLMENT] Cancelled/completed");
+        
+        if (enrollmentMode) {
+          showOled("DANG KY THE", "Moi quet the");
+        } else {
+          showOled("SAN SANG", "Moi quet the");
+        }
       }
     }
   }
@@ -236,7 +357,7 @@ bool submitEnrollmentUid(const String& uid) {
   http.begin(apiBase + "/rfid-enrollment/scan");
   http.addHeader("Content-Type", "application/json");
   
-  StaticJsonDocument<200> doc;
+  JsonDocument doc;
   doc["uid"] = uid;
   String payload;
   serializeJson(doc, payload);
@@ -247,10 +368,14 @@ bool submitEnrollmentUid(const String& uid) {
   return code == HTTP_CODE_OK;
 }
 
-void sendRfidScan(const String& uid) {
+void sendRfidScanTask(void *pvParameters) {
+  String uid = *(String*)pvParameters;
+  delete (String*)pvParameters;
+
   const String apiBase = getApiBase();
   if (apiBase.length() == 0 || !connectToWifi()) {
     startFeedback(FeedbackState::CLOUD_WRITE_FAILED);
+    vTaskDelete(NULL);
     return;
   }
 
@@ -259,7 +384,7 @@ void sendRfidScan(const String& uid) {
   http.begin(url);
   http.addHeader("Content-Type", "application/json");
 
-  StaticJsonDocument<200> doc;
+  JsonDocument doc;
   doc["uid"] = uid;
   doc["deviceId"] = kDeviceId;
   doc["scannedAt"] = getIsoTimestamp();
@@ -271,7 +396,7 @@ void sendRfidScan(const String& uid) {
   int code = http.POST(payload);
   
   if (code > 0) {
-    StaticJsonDocument<200> resp;
+    JsonDocument resp;
     deserializeJson(resp, http.getString());
     String errorCode = resp["errorCode"].as<String>();
     
@@ -294,6 +419,13 @@ void sendRfidScan(const String& uid) {
     startFeedback(FeedbackState::CLOUD_WRITE_FAILED);
   }
   http.end();
+  vTaskDelete(NULL);
+}
+
+void sendRfidScan(const String& uid) {
+  startFeedback(FeedbackState::PROCESSING);
+  String* uidPtr = new String(uid);
+  xTaskCreate(sendRfidScanTask, "rfid_scan", 8192, uidPtr, 1, NULL);
 }
 
 // ----------------------------------------------------------------------------
@@ -303,6 +435,7 @@ void startFeedback(FeedbackState state) {
   feedbackState = state;
   stateStartMs  = millis();
   allOff();
+  showFeedbackOnOled(state);
 }
 
 void updateFeedback() {
@@ -311,8 +444,14 @@ void updateFeedback() {
 
   bool r_led = false, g_led = false, buzz = false;
   unsigned long duration = 2000UL; // default 2s
-
+  
   switch (feedbackState) {
+    case FeedbackState::PROCESSING:
+      // green LED + short beep (instant feedback)
+      g_led = true;
+      buzz = (elapsed < 100);
+      duration = 60000UL; // Up to 60s for face match timeout
+      break;
     case FeedbackState::RFID_INVALID:
       // red LED + short beep (100ms)
       r_led = true;
@@ -368,6 +507,7 @@ void updateFeedback() {
   if (elapsed >= duration) {
     allOff();
     feedbackState = FeedbackState::IDLE;
+    showOled("SAN SANG", "Moi quet the");
   }
 }
 
@@ -375,7 +515,16 @@ void updateFeedback() {
 // RFID
 // ----------------------------------------------------------------------------
 String readCardUid() {
-  if (!rfid.PICC_IsNewCardPresent() || !rfid.PICC_ReadCardSerial()) return "";
+  if (!rfidReady) return "";
+  
+  // Chua co the moi: im lang va tiep tuc cho.
+  if (!rfid.PICC_IsNewCardPresent()) return "";
+
+  // Co the nhung khong doc duoc UID.
+  if (!rfid.PICC_ReadCardSerial()) {
+    Serial.println("[RFID] Card detected but UID read failed");
+    return "";
+  }
   String uid = "";
   for (byte i = 0; i < rfid.uid.size; i++) {
     if (rfid.uid.uidByte[i] < 0x10) uid += "0";
@@ -386,13 +535,18 @@ String readCardUid() {
 }
 
 void handleRfidScan() {
-  if (feedbackState != FeedbackState::IDLE) return;
   static unsigned long lastScanMs = 0UL;
-  if (millis() - lastScanMs < CARD_COOLDOWN_MS) return;
 
+  if (!rfidReady) return;
+
+  if (feedbackState == FeedbackState::PROCESSING) return;
+
+  if (millis() - lastScanMs < CARD_COOLDOWN_MS) return;
+  
   const String uid = readCardUid();
   if (uid.length() == 0) return;
   lastScanMs = millis();
+
 
   rfid.PICC_HaltA();
   rfid.PCD_StopCrypto1();
@@ -400,8 +554,10 @@ void handleRfidScan() {
   lastScannedUid = uid;
   Serial.print("[SCAN] UID=");
   Serial.println(uid);
-
+  Serial.println(enrollmentMode);
+  
   if (enrollmentMode) {
+    showOled("DANG KY THE", uid, "Dang gui...");
     if (submitEnrollmentUid(uid)) {
       enrollmentMode = false;
       startFeedback(FeedbackState::CHECK_IN_ON_TIME);
@@ -410,7 +566,8 @@ void handleRfidScan() {
     }
     return;
   }
-
+  
+  showOled("DA DOC THE", uid, "Dang xu ly...");
   sendRfidScan(uid);
 }
 
@@ -427,6 +584,7 @@ void handleButton() {
   if ((millis() - lastButtonChangeMs) > BUTTON_DEBOUNCE_MS && reading != lastStableButtonState) {
     lastStableButtonState = reading;
     if (reading == LOW) { // Pressed
+      tone(BUZZER_PIN, 1000);
       if (millis() - lastButtonPressMs >= BUTTON_COOLDOWN_MS) {
         lastButtonPressMs = millis();
         Serial.println("[BUTTON] Help requested");
@@ -449,12 +607,41 @@ void setup() {
   pinMode(BUTTON_PIN, INPUT_PULLUP);
   allOff();
 
-  connectToWifi();
-  syncTime();
+  initOled();
 
   SPI.begin(SPI_SCK_PIN, SPI_MISO_PIN, SPI_MOSI_PIN, RFID_SS_PIN);
   rfid.PCD_Init();
+  delay(100);
+
+  const byte version = rfid.PCD_ReadRegister(MFRC522::VersionReg);
+  rfid.PCD_DumpVersionToSerial();
+
+  rfidReady = version != 0x00 && version != 0xFF;
+  Serial.println(rfidReady);
+  if (rfidReady) {
+    rfid.PCD_AntennaOn();
+  } else {
+    Serial.println("[RFID] ERROR: Khong giao tiep duoc voi RC522");
+    Serial.println("[RFID] Kiem tra SDA=GPIO16, RST=GPIO17, SCK=18, MISO=19, MOSI=23, 3.3V va GND");
+  }
+
+  showOled("WIFI", "Dang ket noi...");
+  const bool wifiOk = connectToWifi();
+
+  if (wifiOk) {
+    showOled(
+        "WIFI OK",
+        WiFi.localIP().toString(),
+        "Dang dong bo gio"
+    );
+  } else {
+    showOled("WIFI LOI", "Kiem tra mang");
+  }
+
+  syncTime();
+
   Serial.println("RFID Attendance System ready");
+  showOled("SAN SANG", "Moi quet the");
 }
 
 void loop() {

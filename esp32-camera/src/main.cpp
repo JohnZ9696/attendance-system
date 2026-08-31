@@ -1,83 +1,82 @@
 #include <Arduino.h>
+#include <HTTPClient.h>
 #include <WiFi.h>
 #include <esp_camera.h>
-#include <HTTPClient.h>
-#include "wifi_config.h"
 
-// ============================================================================
-// Configuration
-// ============================================================================
+#include "secrets.example.h"
 
-const char* INTERNAL_API_KEY = "s5HpmgoZ4Wl5A9v8pJ6qLuAyWIrAZLU_nP3W3AeaUDc";
-const char* API_URL = "http://192.168.1.104:8000/internal/v1/cameras/";
-const char* CAMERA_ID = "cam-01";
+// AI-Thinker ESP32-CAM pin map.
+#define PWDN_GPIO_NUM 32
+#define RESET_GPIO_NUM -1
+#define XCLK_GPIO_NUM 0
+#define SIOD_GPIO_NUM 26
+#define SIOC_GPIO_NUM 27
+#define Y9_GPIO_NUM 35
+#define Y8_GPIO_NUM 34
+#define Y7_GPIO_NUM 39
+#define Y6_GPIO_NUM 36
+#define Y5_GPIO_NUM 21
+#define Y4_GPIO_NUM 19
+#define Y3_GPIO_NUM 18
+#define Y2_GPIO_NUM 5
+#define VSYNC_GPIO_NUM 25
+#define HREF_GPIO_NUM 23
+#define PCLK_GPIO_NUM 22
 
-constexpr int FLASH_LED_PIN = 4;
-constexpr unsigned long FRAME_INTERVAL_MS = 100;
-constexpr unsigned long BLINK_INTERVAL_MS = 250;
+constexpr char CAMERA_ID[] = "cam-01";
 constexpr unsigned long COMMAND_POLL_INTERVAL_MS = 500;
+constexpr unsigned long FRAME_INTERVAL_MS = 300;        // khi đang xác thực (≈3.3 FPS)
+constexpr unsigned long PREVIEW_FRAME_INTERVAL_MS = 2000; // preview mode (0.5 FPS)
+constexpr unsigned long WIFI_RETRY_INTERVAL_MS = 5000;
 
-// ============================================================================
-// Camera Pins (AI-Thinker)
-// ============================================================================
-#define PWDN_GPIO_NUM     32
-#define RESET_GPIO_NUM    -1
-#define XCLK_GPIO_NUM      0
-#define SIOD_GPIO_NUM     26
-#define SIOC_GPIO_NUM     27
-#define Y9_GPIO_NUM       35
-#define Y8_GPIO_NUM       34
-#define Y7_GPIO_NUM       39
-#define Y6_GPIO_NUM       36
-#define Y5_GPIO_NUM       21
-#define Y4_GPIO_NUM       19
-#define Y3_GPIO_NUM       18
-#define Y2_GPIO_NUM        5
-#define VSYNC_GPIO_NUM    25
-#define HREF_GPIO_NUM     23
-#define PCLK_GPIO_NUM     22
-
-// ============================================================================
-// State
-// ============================================================================
-unsigned long lastFrameMs = 0;
-unsigned long lastBlinkMs = 0;
 unsigned long lastCommandPollMs = 0;
-bool ledState = false;
+unsigned long lastFrameMs = 0;
+unsigned long lastWiFiRetryMs = 0;
 bool captureRequested = false;
 
-// Đánh dấu HTTP 200 đã được in trong phiên hiện tại.
-bool frameSuccessPrinted = false;
-
-
-// ============================================================================
-// WiFi Connection
-// ============================================================================
-void connectWiFi() {
-  if (WiFi.status() == WL_CONNECTED) return;
-
-  WiFi.mode(WIFI_STA);
-  WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
-  Serial.print("Connecting to WiFi");
-
-  while (WiFi.status() != WL_CONNECTED) {
-    if (millis() - lastBlinkMs > BLINK_INTERVAL_MS) {
-      lastBlinkMs = millis();
-      ledState = !ledState;
-      digitalWrite(FLASH_LED_PIN, ledState);
-    }
-    delay(10);
-    Serial.print(".");
-  }
-  Serial.println("\nWiFi connected");
-  digitalWrite(FLASH_LED_PIN, LOW); // Off when connected
+String cameraUrl(const char* endpoint) {
+  return String(AI_SERVICE_BASE_URL) + "/internal/v1/cameras/" + CAMERA_ID + endpoint;
 }
 
-// ============================================================================
-// Camera Initialization
-// ============================================================================
+void setCaptureRequested(bool active) {
+  if (captureRequested == active) {
+    return;
+  }
+
+  captureRequested = active;
+  Serial.println(active ? "[CAMERA] Capture started" : "[CAMERA] Capture stopped");
+}
+
+void connectWiFi() {
+  if (WiFi.status() == WL_CONNECTED) {
+    return;
+  }
+
+  WiFi.mode(WIFI_STA);
+  WiFi.persistent(false);
+  WiFi.setAutoReconnect(true);
+  WiFi.setSleep(false);
+  WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+
+  Serial.print("[WIFI] Connecting");
+  const unsigned long startedMs = millis();
+  while (WiFi.status() != WL_CONNECTED && millis() - startedMs < 15000) {
+    Serial.print('.');
+    delay(250);
+  }
+
+  if (WiFi.status() == WL_CONNECTED) {
+    Serial.print("\n[WIFI] Connected: ");
+    Serial.println(WiFi.localIP());
+  } else {
+    Serial.println("\n[WIFI] Connection timeout");
+  }
+}
+
 bool initCamera() {
+  const bool hasPsram = psramFound();
   camera_config_t config = {};
+
   config.ledc_channel = LEDC_CHANNEL_0;
   config.ledc_timer = LEDC_TIMER_0;
   config.pin_d0 = Y2_GPIO_NUM;
@@ -98,257 +97,134 @@ bool initCamera() {
   config.pin_reset = RESET_GPIO_NUM;
   config.xclk_freq_hz = 20000000;
   config.pixel_format = PIXFORMAT_JPEG;
-
-  // FRAMESIZE_VGA, JPEG quality 12, 1 frame buffer
-  config.frame_size = FRAMESIZE_VGA;
-  config.jpeg_quality = 15;
+  config.frame_size = hasPsram ? FRAMESIZE_VGA : FRAMESIZE_QVGA;
+  config.jpeg_quality = hasPsram ? 12 : 18;
   config.fb_count = 1;
-  config.grab_mode = CAMERA_GRAB_WHEN_EMPTY;
-  config.fb_location = CAMERA_FB_IN_PSRAM;
+  config.fb_location = hasPsram ? CAMERA_FB_IN_PSRAM : CAMERA_FB_IN_DRAM;
+  config.grab_mode = hasPsram ? CAMERA_GRAB_LATEST : CAMERA_GRAB_WHEN_EMPTY;
 
-  esp_err_t err = esp_camera_init(&config);
-  if (err != ESP_OK) {
-    Serial.printf("Camera init failed with error 0x%x\n", err);
+  const esp_err_t result = esp_camera_init(&config);
+  if (result != ESP_OK) {
+    Serial.printf("[CAMERA] Init failed: 0x%x\n", result);
     return false;
   }
-  Serial.println("Camera initialized");
+
+  Serial.printf("[CAMERA] Ready (PSRAM: %s)\n", hasPsram ? "yes" : "no");
   return true;
 }
 
-// ============================================================================
-// ISO-8601 Timestamp Approximation
-// ============================================================================
-String getIsoTimestamp() {
-  time_t now;
-  struct tm timeinfo;
-  if (!getLocalTime(&timeinfo)) {
-    return "";
-  }
-  char buf[32];
-  strftime(buf, sizeof(buf), "%Y-%m-%dT%H:%M:%SZ", &timeinfo);
-  return String(buf);
-}
-
-// ============================================================================
-// Capture Command Polling
-// ============================================================================
 void pollCaptureCommand() {
-  if (millis() - lastCommandPollMs < COMMAND_POLL_INTERVAL_MS) {
-    return;
-  }
-
-  lastCommandPollMs = millis();
-
-  if (WiFi.status() != WL_CONNECTED) {
-    captureRequested = false;
-    frameSuccessPrinted = false;
-    Serial.println("[COMMAND] WiFi offline");
-    return;
-  }
-
+  WiFiClient client;
   HTTPClient http;
-  String url = String(API_URL) + CAMERA_ID + "/capture-command";
 
-  http.begin(url);
+  if (!http.begin(client, cameraUrl("/capture-command"))) {
+    Serial.println("[COMMAND] Invalid URL");
+    setCaptureRequested(false);
+    return;
+  }
+
+  http.setConnectTimeout(1500);
+  http.setTimeout(3000);
   http.addHeader("INTERNAL-API-KEY", INTERNAL_API_KEY);
-  http.setTimeout(2000);
 
-  int code = http.GET();
-
-  if (code == HTTP_CODE_OK) {
+  const int statusCode = http.GET();
+  if (statusCode == HTTP_CODE_OK) {
     String response = http.getString();
-
     response.replace(" ", "");
     response.replace("\r", "");
     response.replace("\n", "");
-
-    bool newCaptureRequested =
-        response.indexOf("\"active\":true") >= 0;
-
-    // Chỉ in log khi active thay đổi.
-    if (newCaptureRequested != captureRequested) {
-      captureRequested = newCaptureRequested;
-
-      if (captureRequested) {
-        // Bắt đầu phiên mới: cho phép in HTTP 200 một lần.
-        frameSuccessPrinted = false;
-        Serial.println("[CAMERA] Capture started");
-      } else {
-        Serial.println("[CAMERA] Capture stopped");
-      }
-    }
+    setCaptureRequested(response.indexOf("\"active\":true") >= 0);
   } else {
-    captureRequested = false;
-    frameSuccessPrinted = false;
-
-    if (code < 0) {
-      Serial.printf(
-          "[COMMAND] Failed: %s\n",
-          http.errorToString(code).c_str()
-      );
-    } else {
-      Serial.printf(
-          "[COMMAND] HTTP error: %d\n",
-          code
-      );
-    }
+    Serial.printf("[COMMAND] Request failed: %d\n", statusCode);
+    setCaptureRequested(false);
   }
 
   http.end();
 }
 
-// ============================================================================
-// Send Frame
-// ============================================================================
-void sendFrameRaw() {
-  if (millis() - lastFrameMs < FRAME_INTERVAL_MS) {
+void sendFrame() {
+  camera_fb_t* frame = esp_camera_fb_get();
+  if (frame == nullptr) {
+    Serial.println("[FRAME] Capture failed");
     return;
   }
 
-  lastFrameMs = millis();
+  const String boundary = "----ESP32CamBoundary";
+  const String bodyStart =
+      "--" + boundary + "\r\n"
+      "Content-Disposition: form-data; name=\"image\"; filename=\"frame.jpg\"\r\n"
+      "Content-Type: image/jpeg\r\n\r\n";
+  const String bodyEnd = "\r\n--" + boundary + "--\r\n";
+  const size_t bodyLength = bodyStart.length() + frame->len + bodyEnd.length();
 
-  camera_fb_t* fb = esp_camera_fb_get();
-
-  if (!fb) {
+  uint8_t* body = static_cast<uint8_t*>(malloc(bodyLength));
+  if (body == nullptr) {
+    Serial.println("[FRAME] Not enough memory to upload frame");
+    esp_camera_fb_return(frame);
     return;
   }
 
+  memcpy(body, bodyStart.c_str(), bodyStart.length());
+  memcpy(body + bodyStart.length(), frame->buf, frame->len);
+  memcpy(body + bodyStart.length() + frame->len, bodyEnd.c_str(), bodyEnd.length());
+
+  WiFiClient client;
   HTTPClient http;
-  String url =
-      String(API_URL)
-      + CAMERA_ID
-      + "/frames";
+  int statusCode = -1;
 
-  http.begin(url);
-  http.setTimeout(10000);
-  http.addHeader(
-      "INTERNAL-API-KEY",
-      INTERNAL_API_KEY
-  );
-
-  String boundary = "----ESP32CamBoundary";
-
-  http.addHeader(
-      "Content-Type",
-      "multipart/form-data; boundary=" + boundary
-  );
-
-  String head =
-      "--" + boundary + "\r\n";
-
-  head +=
-      "Content-Disposition: form-data; "
-      "name=\"cameraId\"\r\n\r\n";
-
-  head += String(CAMERA_ID) + "\r\n";
-
-  head += "--" + boundary + "\r\n";
-
-  head +=
-      "Content-Disposition: form-data; "
-      "name=\"image\"; filename=\"frame.jpg\"\r\n";
-
-  head += "Content-Type: image/jpeg\r\n\r\n";
-
-  String tail =
-      "\r\n--" + boundary + "--\r\n";
-
-  size_t totalLen =
-      head.length()
-      + fb->len
-      + tail.length();
-
-  uint8_t* postData = psramFound()
-      ? (uint8_t*)ps_malloc(totalLen)
-      : (uint8_t*)malloc(totalLen);
-
-  if (!postData) {
-    esp_camera_fb_return(fb);
+  if (http.begin(client, cameraUrl("/frames"))) {
+    http.setConnectTimeout(2000);
+    http.setTimeout(8000);
+    http.addHeader("INTERNAL-API-KEY", INTERNAL_API_KEY);
+    http.addHeader("Content-Type", "multipart/form-data; boundary=" + boundary);
+    statusCode = http.POST(body, bodyLength);
     http.end();
-    return;
   }
 
-  memcpy(
-      postData,
-      head.c_str(),
-      head.length()
-  );
+  free(body);
+  esp_camera_fb_return(frame);
 
-  memcpy(
-      postData + head.length(),
-      fb->buf,
-      fb->len
-  );
-
-  memcpy(
-      postData + head.length() + fb->len,
-      tail.c_str(),
-      tail.length()
-  );
-
-  int code = http.POST(
-      postData,
-      totalLen
-  );
-
-  if (code == HTTP_CODE_OK) {
-    // Các frame vẫn được gửi liên tục nhưng chỉ in 200 một lần.
-    if (!frameSuccessPrinted) {
-      Serial.println("[FRAME] Connected - HTTP 200");
-      frameSuccessPrinted = true;
-    }
-  } else {
-    // Khi có lỗi, cho phép lần thành công tiếp theo được in lại.
-    frameSuccessPrinted = false;
-
-    if (code > 0) {
-      Serial.printf(
-          "[FRAME] HTTP error: %d\n",
-          code
-      );
-    } else {
-      Serial.printf(
-          "[FRAME] Send failed: %s\n",
-          http.errorToString(code).c_str()
-      );
-    }
+  if (statusCode != HTTP_CODE_OK) {
+    Serial.printf("[FRAME] Upload failed: %d\n", statusCode);
   }
-
-  free(postData);
-  http.end();
-  esp_camera_fb_return(fb);
 }
 
 void setup() {
   Serial.begin(115200);
-  pinMode(FLASH_LED_PIN, OUTPUT);
-  digitalWrite(FLASH_LED_PIN, LOW);
-
   connectWiFi();
-  configTime(0, 0, "pool.ntp.org");
 
-  while (!initCamera()) {
-    Serial.println("Retrying camera init in 1s...");
-    delay(1000);
+  if (!initCamera()) {
+    Serial.println("[CAMERA] Restarting in 3 seconds");
+    delay(3000);
+    ESP.restart();
   }
 
-  Serial.println("[CAMERA] Capture firmware V2 ready");
+  lastCommandPollMs = millis() - COMMAND_POLL_INTERVAL_MS;
+  Serial.println("[CAMERA] Ready");
 }
 
 void loop() {
   if (WiFi.status() != WL_CONNECTED) {
-    digitalWrite(FLASH_LED_PIN, LOW);
-    WiFi.reconnect();
-    delay(500);
+    setCaptureRequested(false);
+    if (millis() - lastWiFiRetryMs >= WIFI_RETRY_INTERVAL_MS) {
+      lastWiFiRetryMs = millis();
+      connectWiFi();
+    }
+    delay(20);
     return;
   }
 
-  pollCaptureCommand();
-  digitalWrite(FLASH_LED_PIN, LOW);
-
-  if (captureRequested) {
-    sendFrameRaw();
+  if (millis() - lastCommandPollMs >= COMMAND_POLL_INTERVAL_MS) {
+    lastCommandPollMs = millis();
+    pollCaptureCommand();
   }
 
-  delay(20);
+  // Luôn gửi frame để preview trên web có hình
+  unsigned long interval = captureRequested ? FRAME_INTERVAL_MS : PREVIEW_FRAME_INTERVAL_MS;
+  if (millis() - lastFrameMs >= interval) {
+    lastFrameMs = millis();
+    sendFrame();
+  }
+
+  delay(5);
 }
