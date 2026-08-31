@@ -3,7 +3,7 @@
 #include <WiFi.h>
 #include <esp_camera.h>
 
-#include "secrets.h"
+#include "secrets.example.h"
 
 // AI-Thinker ESP32-CAM pin map.
 #define PWDN_GPIO_NUM 32
@@ -25,7 +25,8 @@
 
 constexpr char CAMERA_ID[] = "cam-01";
 constexpr unsigned long COMMAND_POLL_INTERVAL_MS = 500;
-constexpr unsigned long FRAME_INTERVAL_MS = 300;
+constexpr unsigned long FRAME_INTERVAL_MS = 300;        // khi đang xác thực (≈3.3 FPS)
+constexpr unsigned long PREVIEW_FRAME_INTERVAL_MS = 2000; // preview mode (0.5 FPS)
 constexpr unsigned long WIFI_RETRY_INTERVAL_MS = 5000;
 
 unsigned long lastCommandPollMs = 0;
@@ -218,7 +219,9 @@ void loop() {
     pollCaptureCommand();
   }
 
-  if (captureRequested && millis() - lastFrameMs >= FRAME_INTERVAL_MS) {
+  // Luôn gửi frame để preview trên web có hình
+  unsigned long interval = captureRequested ? FRAME_INTERVAL_MS : PREVIEW_FRAME_INTERVAL_MS;
+  if (millis() - lastFrameMs >= interval) {
     lastFrameMs = millis();
     sendFrame();
   }

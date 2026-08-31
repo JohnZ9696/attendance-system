@@ -10,6 +10,10 @@ from mediapipe.python.solutions import face_mesh as mp_face_mesh
 LEFT_EYE = [362, 385, 387, 263, 373, 380]
 RIGHT_EYE = [33, 160, 158, 133, 153, 144]
 
+
+
+# https://github.com/google-ai-edge/mediapipe/blob/master/mediapipe/python/solutions/face_mesh_connections.py?utm_source=chatgpt.com
+
 CALIBRATION_FRAMES = 3
 CLOSED_EAR_RATIO = 0.5
 REOPEN_EAR_RATIO = 0.98
