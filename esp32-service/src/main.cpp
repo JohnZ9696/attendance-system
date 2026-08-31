@@ -65,11 +65,13 @@ enum class FeedbackState : uint8_t {
   IDLE, 
   PROCESSING,
   RFID_INVALID,
+  FACE_NOT_ENROLLED,
   CAMERA_OFFLINE,
   CAPTURE_TIMEOUT,
   LIVENESS_FAILED,
   FACE_BELOW_THRESHOLD,
   FACE_MATCH_TIMEOUT,
+  MULTIPLE_FACES,
   ALREADY_CHECKED_IN,
   CHECK_IN_ON_TIME,
   CHECK_IN_LATE,
@@ -143,6 +145,10 @@ void showFeedbackOnOled(FeedbackState state) {
       showOled("THAT BAI", "THE KHONG HOP LE");
       break;
 
+    case FeedbackState::FACE_NOT_ENROLLED:
+      showOled("THAT BAI", "CHUA DANG KY MAT");
+      break;
+
     case FeedbackState::CAMERA_OFFLINE:
       showOled("THAT BAI", "CAMERA OFFLINE");
       break;
@@ -161,6 +167,10 @@ void showFeedbackOnOled(FeedbackState state) {
 
     case FeedbackState::FACE_MATCH_TIMEOUT:
       showOled("THAT BAI", "FACE TIMEOUT");
+      break;
+
+    case FeedbackState::MULTIPLE_FACES:
+      showOled("THAT BAI", "NHIEU KHUON MAT");
       break;
 
     case FeedbackState::ALREADY_CHECKED_IN:
@@ -452,50 +462,51 @@ void updateFeedback() {
       buzz = (elapsed < 100);
       duration = 60000UL; // Up to 60s for face match timeout
       break;
-    case FeedbackState::RFID_INVALID:
-      // red LED + short beep (100ms)
-      r_led = true;
-      buzz = (elapsed < 100);
-      break;
+
+    // ===== TẤT CẢ LỖI -> ĐỎ =====
+    case FeedbackState::RFID_INVALID:           // UID không có trong DB
+    case FeedbackState::FACE_NOT_ENROLLED:      // Chưa enroll face
     case FeedbackState::CAMERA_OFFLINE:
     case FeedbackState::CAPTURE_TIMEOUT:
     case FeedbackState::LIVENESS_FAILED:
     case FeedbackState::FACE_MATCH_TIMEOUT:
-      // red LED + 2 beeps (100ms on, 100ms off, 100ms on)
+    case FeedbackState::MULTIPLE_FACES:         // Đa khuôn mặt
       r_led = true;
-      buzz = (elapsed < 100) || (elapsed >= 200 && elapsed < 300);
+      buzz = (elapsed < 100) || (elapsed >= 200 && elapsed < 300); // 2 beep ngắn
       break;
-    case FeedbackState::FACE_BELOW_THRESHOLD:
-      // red LED + long beep (1000ms)
+
+    case FeedbackState::FACE_BELOW_THRESHOLD:   // Sai khuôn mặt
       r_led = true;
-      buzz = (elapsed < 1000);
+      buzz = (elapsed < 1000);                  // 1 beep dài
       break;
+
+    // ===== THÀNH CÔNG -> XANH =====
     case FeedbackState::ALREADY_CHECKED_IN:
-      // green blink / special pattern
-      g_led = (elapsed % 500) < 250;
+      g_led = (elapsed % 500) < 250;            // Xanh nháy
       duration = 2000UL;
       break;
+
     case FeedbackState::CHECK_IN_ON_TIME:
-      // green LED + short beep
       g_led = true;
-      buzz = (elapsed < 100);
+      buzz = (elapsed < 100);                   // 1 beep ngắn
       break;
+
     case FeedbackState::CHECK_IN_LATE:
-      // green LED + 2 short beeps
       g_led = true;
-      buzz = (elapsed < 100) || (elapsed >= 200 && elapsed < 300);
+      buzz = (elapsed < 100) || (elapsed >= 200 && elapsed < 300); // 2 beep ngắn
       break;
+
     case FeedbackState::CLOUD_WRITE_FAILED:
-      // red LED + error beep
       r_led = true;
-      buzz = (elapsed < 500); // 500ms beep
+      buzz = (elapsed < 500);                   // Beep dài 500ms
       break;
+
     case FeedbackState::INCIDENT_RECORDED:
-      // confirm LED
       g_led = true;
       buzz = (elapsed < 100);
       duration = 1000UL;
       break;
+
     default:
       break;
   }

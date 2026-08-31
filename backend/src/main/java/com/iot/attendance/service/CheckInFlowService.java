@@ -101,7 +101,10 @@ public class CheckInFlowService {
             return log.getResult().name();
         }
 
-        log.setResult(response.result());
+        // Map FastAPI failureReason to Spring VerificationResult
+        VerificationResult mappedResult = mapFailureReason(response.result(), response.failureReason());
+        
+        log.setResult(mappedResult);
         log.setSimilarityPercent(BigDecimal.valueOf(response.similarityPercent()));
         log.setLivenessPassed(response.livenessPassed());
         log.setFailureReason(response.failureReason());
@@ -110,10 +113,10 @@ public class CheckInFlowService {
         log.setCompletedAt(OffsetDateTime.now());
         verificationLogRepository.save(log);
 
-        String resultName = response.result().name();
+        String resultName = mappedResult.name();
         String message = response.failureReason();
 
-        if (response.result() == VerificationResult.VERIFIED) {
+        if (mappedResult == VerificationResult.VERIFIED) {
             try {
                 var attendanceLog = attendanceService.recordAttendance(log.getStudent(), log);
                 message = "Diem danh thanh cong";
@@ -178,5 +181,22 @@ public class CheckInFlowService {
                 sseEventService.publishEvent("verification_update", event);
             }
         });
+    }
+
+    private VerificationResult mapFailureReason(VerificationResult fastApiResult, String failureReason) {
+        if (failureReason == null) {
+            return fastApiResult;
+        }
+        
+        return switch (failureReason) {
+            case "MULTIPLE_FACES" -> VerificationResult.MULTIPLE_FACES;
+            case "SIMILARITY_BELOW_THRESHOLD" -> VerificationResult.FACE_BELOW_THRESHOLD;
+            case "OPEN_CLOSED_OPEN_BLINK_NOT_COMPLETED" -> VerificationResult.LIVENESS_FAILED;
+            case "NO_FACE_IN_CAPTURE_WINDOW" -> VerificationResult.CAPTURE_TIMEOUT;
+            case "NO_FRESH_CAMERA_FRAME" -> VerificationResult.CAMERA_OFFLINE;
+            case "FACE_MODEL_TIMEOUT", "NO_VALID_FACE_FOR_MATCHING" -> VerificationResult.FACE_MATCH_TIMEOUT;
+            case "FACE_PROFILE_NOT_FOUND_OR_INACTIVE" -> VerificationResult.FACE_NOT_ENROLLED;
+            default -> fastApiResult;
+        };
     }
 }
