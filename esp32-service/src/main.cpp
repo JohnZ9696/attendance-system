@@ -53,7 +53,6 @@ constexpr unsigned long BUTTON_COOLDOWN_MS = 2000UL;  // min gap between help bu
 constexpr unsigned long CARD_COOLDOWN_MS   = 500UL;   // min gap between reads
 constexpr unsigned long ENROLLMENT_POLL_MS = 1000UL;  // backend command polling
 constexpr unsigned long HEARTBEAT_INTERVAL_MS = 60000UL; // Heartbeat interval
-constexpr unsigned long OLED_NOTIFY_POLL_MS = 2000UL;  // OLED notification polling
 constexpr int           WIFI_TIMEOUT_S     = 15;      // max WiFi connect wait
 
 // ============================================================================
@@ -90,8 +89,8 @@ unsigned long lastHeartbeatMs    = 0UL;
 
 String lastScannedUid;
 bool enrollmentMode = false;
+volatile bool rfidRequestInProgress = false;
 unsigned long lastEnrollmentPollMs = 0UL;
-unsigned long lastOledNotifyPollMs = 0UL;
 bool rfidReady = false;
 
 // ----------------------------------------------------------------------------
@@ -144,12 +143,10 @@ void showFeedbackOnOled(FeedbackState state) {
   switch (state) {
     case FeedbackState::RFID_INVALID:
       showOled("THAT BAI", "THE KHONG HOP LE");
-      digitalWrite(LED_RED_PIN, HIGH);
       break;
 
     case FeedbackState::FACE_NOT_ENROLLED:
       showOled("THAT BAI", "CHUA DANG KY MAT");
-      digitalWrite(LED_RED_PIN, HIGH);
       break;
 
     case FeedbackState::CAMERA_OFFLINE:
@@ -158,32 +155,26 @@ void showFeedbackOnOled(FeedbackState state) {
 
     case FeedbackState::CAPTURE_TIMEOUT:
       showOled("THAT BAI", "CAPTURE TIMEOUT");
-      digitalWrite(LED_RED_PIN, HIGH);
       break;
 
     case FeedbackState::LIVENESS_FAILED:
       showOled("THAT BAI", "LIVENESS FAILED");
-      digitalWrite(LED_RED_PIN, HIGH);
       break;
 
     case FeedbackState::FACE_BELOW_THRESHOLD:
       showOled("THAT BAI", "FACE NOT MATCH");
-      digitalWrite(LED_RED_PIN, HIGH);
       break;
 
     case FeedbackState::FACE_MATCH_TIMEOUT:
       showOled("THAT BAI", "FACE TIMEOUT");
-      digitalWrite(LED_RED_PIN, HIGH);
       break;
 
     case FeedbackState::MULTIPLE_FACES:
       showOled("THAT BAI", "NHIEU KHUON MAT");
-      digitalWrite(LED_RED_PIN, HIGH);
       break;
 
     case FeedbackState::ALREADY_CHECKED_IN:
       showOled("THONG BAO", "DA DIEM DANH");
-      digitalWrite(LED_RED_PIN, HIGH);
       break;
 
     case FeedbackState::CHECK_IN_ON_TIME:
@@ -196,7 +187,6 @@ void showFeedbackOnOled(FeedbackState state) {
 
     case FeedbackState::CLOUD_WRITE_FAILED:
       showOled("LOI HE THONG", "KHONG GUI DUOC");
-      digitalWrite(LED_RED_PIN, HIGH);
       break;
 
     case FeedbackState::INCIDENT_RECORDED:
@@ -206,17 +196,12 @@ void showFeedbackOnOled(FeedbackState state) {
     default:
       break;
   }
-  delay(1000);
-  digitalWrite(LED_RED_PIN, LOW);
 }
 
 // ----------------------------------------------------------------------------
 // Low-level peripheral helpers
 // ----------------------------------------------------------------------------
-void setBuzzer(bool on, uint16_t freq = 1000) {
-  if (on) tone(BUZZER_PIN, freq);
-  else    noTone(BUZZER_PIN);
-}
+void setBuzzer(bool on) { digitalWrite(BUZZER_PIN, on ? HIGH : LOW); }
 
 void allOff() {
   digitalWrite(LED_GREEN_PIN, LOW);
@@ -282,6 +267,35 @@ IPAddress workingNetworkIp(0, 0, 0, 0);
 
 constexpr uint16_t DISCOVERY_PORT = 4210;
 
+bool readDiscoveryResponse(
+    WiFiUDP& udp,
+    IPAddress& outIp,
+    uint16_t& outPort,
+    unsigned long timeoutMs) {
+  const unsigned long deadline = millis() + timeoutMs;
+  while ((long)(deadline - millis()) > 0) {
+    int size = udp.parsePacket();
+    if (size > 0) {
+      char response[64] = {};
+      int read = udp.read(response, sizeof(response) - 1);
+      if (read > 0 && strncmp(response, "ATTENDANCE_SERVER_V1:", 21) == 0) {
+        outIp = udp.remoteIP();
+        outPort = static_cast<uint16_t>(atoi(response + 21));
+        return outPort > 0;
+      }
+    }
+    delay(5);
+  }
+  return false;
+}
+
+void sendDiscoveryRequest(WiFiUDP& udp, const IPAddress& target) {
+  const char request[] = "ATTENDANCE_DISCOVER_V1";
+  udp.beginPacket(target, DISCOVERY_PORT);
+  udp.write(reinterpret_cast<const uint8_t*>(request), sizeof(request) - 1);
+  udp.endPacket();
+}
+
 bool discoverServer(IPAddress& outIp, uint16_t& outPort) {
   WiFiUDP udp;
   if (!udp.begin(0)) return false;
@@ -293,27 +307,27 @@ bool discoverServer(IPAddress& outIp, uint16_t& outPort) {
       localIp[1] | static_cast<uint8_t>(~mask[1]),
       localIp[2] | static_cast<uint8_t>(~mask[2]),
       localIp[3] | static_cast<uint8_t>(~mask[3]));
-  const char request[] = "ATTENDANCE_DISCOVER_V1";
-
   for (int attempt = 0; attempt < 3; attempt++) {
-    udp.beginPacket(broadcast, DISCOVERY_PORT);
-    udp.write(reinterpret_cast<const uint8_t*>(request), sizeof(request) - 1);
-    udp.endPacket();
+    sendDiscoveryRequest(udp, broadcast);
+    if (readDiscoveryResponse(udp, outIp, outPort, 700)) {
+      udp.stop();
+      return true;
+    }
+  }
 
-    const unsigned long deadline = millis() + 700;
-    while ((long)(deadline - millis()) > 0) {
-      int size = udp.parsePacket();
-      if (size > 0) {
-        char response[64] = {};
-        int read = udp.read(response, sizeof(response) - 1);
-        if (read > 0 && strncmp(response, "ATTENDANCE_SERVER_V1:", 21) == 0) {
-          outIp = udp.remoteIP();
-          outPort = static_cast<uint16_t>(atoi(response + 21));
-          udp.stop();
-          return outPort > 0;
-        }
+  // Phone hotspots may block broadcast but still allow direct client traffic.
+  if (mask[0] == 255 && mask[1] == 255 && mask[2] == 255) {
+    const uint8_t firstHost = (localIp[3] & mask[3]) + 1;
+    const uint8_t lastHost = (localIp[3] | static_cast<uint8_t>(~mask[3])) - 1;
+    Serial.println("[DISCOVERY] Broadcast bi chan, dang quet subnet...");
+
+    for (uint16_t host = firstHost; host <= lastHost; host++) {
+      if (host == localIp[3]) continue;
+      sendDiscoveryRequest(udp, IPAddress(localIp[0], localIp[1], localIp[2], host));
+      if (readDiscoveryResponse(udp, outIp, outPort, 40)) {
+        udp.stop();
+        return true;
       }
-      delay(10);
     }
   }
 
@@ -359,6 +373,7 @@ String getApiBase() {
 // ----------------------------------------------------------------------------
 
 void sendHeartbeat() {
+  if (rfidRequestInProgress) return;
   if (millis() - lastHeartbeatMs < HEARTBEAT_INTERVAL_MS) return;
   lastHeartbeatMs = millis();
   
@@ -374,6 +389,11 @@ void sendHeartbeat() {
 }
 
 void sendHelpRequest() {
+  if (rfidRequestInProgress) {
+    startFeedback(FeedbackState::PROCESSING);
+    return;
+  }
+
   const String apiBase = getApiBase();
   if (apiBase.length() == 0 || !connectToWifi()) {
     startFeedback(FeedbackState::CLOUD_WRITE_FAILED);
@@ -410,6 +430,7 @@ void sendHelpRequest() {
 }
 
 void pollEnrollmentCommand() {
+  if (rfidRequestInProgress) return;
   if (millis() - lastEnrollmentPollMs < ENROLLMENT_POLL_MS || WiFi.status() != WL_CONNECTED) return;
   lastEnrollmentPollMs = millis();
 
@@ -431,37 +452,6 @@ void pollEnrollmentCommand() {
         if (enrollmentMode) {
           showOled("DANG KY THE", "Moi quet the");
         } else {
-          showOled("SAN SANG", "Moi quet the");
-        }
-      }
-    }
-  }
-  http.end();
-}
-
-void pollOledNotification() {
-  if (millis() - lastOledNotifyPollMs < OLED_NOTIFY_POLL_MS || WiFi.status() != WL_CONNECTED) return;
-  lastOledNotifyPollMs = millis();
-
-  const String apiBase = getApiBase();
-  if (apiBase.length() == 0) return;
-
-  HTTPClient http;
-  http.begin(apiBase + "/notifications/pending");
-  http.setTimeout(2000);
-  int code = http.GET();
-  if (code == HTTP_CODE_OK) {
-    JsonDocument doc;
-    String body = http.getString();
-    if (!deserializeJson(doc, body)) {
-      String msg = doc["message"].as<String>();
-      if (msg.length() > 0) {
-        Serial.print("[OLED] Notification: ");
-        Serial.println(msg);
-        // Show for 5 s then return to ready screen
-        showOled("THONG BAO", msg);
-        delay(5000);
-        if (feedbackState == FeedbackState::IDLE) {
           showOled("SAN SANG", "Moi quet the");
         }
       }
@@ -495,14 +485,23 @@ void sendRfidScanTask(void *pvParameters) {
 
   const String apiBase = getApiBase();
   if (apiBase.length() == 0 || !connectToWifi()) {
+    Serial.println("[RFID HTTP] WiFi or API base unavailable");
     startFeedback(FeedbackState::CLOUD_WRITE_FAILED);
+    rfidRequestInProgress = false;
     vTaskDelete(NULL);
     return;
   }
 
+  WiFiClient client;
   HTTPClient http;
   String url = apiBase + "/devices/" + kDeviceId + "/rfid-scans";
-  http.begin(url);
+  if (!http.begin(client, url)) {
+    Serial.printf("[RFID HTTP] Invalid URL: %s\n", url.c_str());
+    startFeedback(FeedbackState::CLOUD_WRITE_FAILED);
+    rfidRequestInProgress = false;
+    vTaskDelete(NULL);
+    return;
+  }
   http.addHeader("Content-Type", "application/json");
 
   JsonDocument doc;
@@ -514,11 +513,15 @@ void sendRfidScanTask(void *pvParameters) {
   serializeJson(doc, payload);
 
   http.setTimeout(50000); // Allow time for face match
+  Serial.printf("[RFID HTTP] POST %s\n", url.c_str());
   int code = http.POST(payload);
+  String responseBody = code > 0 ? http.getString() : http.errorToString(code);
+  Serial.printf("[RFID HTTP] Status: %d\n", code);
+  Serial.println(responseBody);
   
   if (code > 0) {
     JsonDocument resp;
-    deserializeJson(resp, http.getString());
+    deserializeJson(resp, responseBody);
     String errorCode = resp["errorCode"].as<String>();
     
     if (code == 200 || code == 201) {
@@ -540,13 +543,21 @@ void sendRfidScanTask(void *pvParameters) {
     startFeedback(FeedbackState::CLOUD_WRITE_FAILED);
   }
   http.end();
+  rfidRequestInProgress = false;
   vTaskDelete(NULL);
 }
 
 void sendRfidScan(const String& uid) {
+  if (rfidRequestInProgress) return;
+  rfidRequestInProgress = true;
   startFeedback(FeedbackState::PROCESSING);
   String* uidPtr = new String(uid);
-  xTaskCreate(sendRfidScanTask, "rfid_scan", 8192, uidPtr, 1, NULL);
+  if (uidPtr == nullptr || xTaskCreate(sendRfidScanTask, "rfid_scan", 8192, uidPtr, 1, NULL) != pdPASS) {
+    delete uidPtr;
+    rfidRequestInProgress = false;
+    startFeedback(FeedbackState::CLOUD_WRITE_FAILED);
+    Serial.println("[RFID HTTP] Could not start request task");
+  }
 }
 
 // ----------------------------------------------------------------------------
@@ -571,7 +582,7 @@ void updateFeedback() {
       // green LED + short beep (instant feedback)
       g_led = true;
       buzz = (elapsed < 100);
-      duration = 30000UL; // Up to 60s for face match timeout
+      duration = 60000UL; // Up to 60s for face match timeout
       break;
 
     // ===== TẤT CẢ LỖI -> ĐỎ =====
@@ -589,20 +600,17 @@ void updateFeedback() {
     case FeedbackState::FACE_BELOW_THRESHOLD:   // Sai khuôn mặt
       r_led = true;
       buzz = (elapsed < 1000);                  // 1 beep dài
-      showOled("KHUON MAT KHONG TRUNG KHOP", "Moi quet the");
       break;
 
     // ===== THÀNH CÔNG -> XANH =====
     case FeedbackState::ALREADY_CHECKED_IN:
       g_led = (elapsed % 500) < 250;            // Xanh nháy
       duration = 2000UL;
-      showOled("DA DIEM DANH", "Di dung gio! Xin moi vao");
       break;
 
     case FeedbackState::CHECK_IN_ON_TIME:
       g_led = true;
       buzz = (elapsed < 100);                   // 1 beep ngắn
-      showOled("DIEM DANH THANH CONG", "Xin moi vao");
       break;
 
     case FeedbackState::CHECK_IN_LATE:
@@ -648,7 +656,6 @@ String readCardUid() {
   // Co the nhung khong doc duoc UID.
   if (!rfid.PICC_ReadCardSerial()) {
     Serial.println("[RFID] Card detected but UID read failed");
-    showOled("LOI RFID", "Doc UID that bai");
     return "";
   }
   String uid = "";
@@ -673,8 +680,6 @@ void handleRfidScan() {
   if (uid.length() == 0) return;
   lastScanMs = millis();
 
-  // Immediate audio feedback on successful card read
-  tone(BUZZER_PIN, 1500, 500);
 
   rfid.PICC_HaltA();
   rfid.PCD_StopCrypto1();
@@ -691,9 +696,6 @@ void handleRfidScan() {
       startFeedback(FeedbackState::CHECK_IN_ON_TIME);
     } else {
       startFeedback(FeedbackState::CLOUD_WRITE_FAILED);
-      digitalWrite(LED_RED_PIN, HIGH);
-      delay(1000);
-      digitalWrite(LED_RED_PIN, LOW);
     }
     return;
   }
@@ -715,7 +717,7 @@ void handleButton() {
   if ((millis() - lastButtonChangeMs) > BUTTON_DEBOUNCE_MS && reading != lastStableButtonState) {
     lastStableButtonState = reading;
     if (reading == LOW) { // Pressed
-      setBuzzer(true, 1000);
+      tone(BUZZER_PIN, 1000);
       if (millis() - lastButtonPressMs >= BUTTON_COOLDOWN_MS) {
         lastButtonPressMs = millis();
         Serial.println("[BUTTON] Help requested");
@@ -753,9 +755,7 @@ void setup() {
     rfid.PCD_AntennaOn();
   } else {
     Serial.println("[RFID] ERROR: Khong giao tiep duoc voi RC522");
-    showOled("LOI RFID", "RC522 loi");
     Serial.println("[RFID] Kiem tra SDA=GPIO16, RST=GPIO17, SCK=18, MISO=19, MOSI=23, 3.3V va GND");
-    showOled("RFID", "Kiem tra day noi");
   }
 
   showOled("WIFI", "Dang ket noi...");
@@ -780,7 +780,6 @@ void setup() {
 void loop() {
   handleButton();
   pollEnrollmentCommand();
-  pollOledNotification();
   handleRfidScan();
   updateFeedback();
   sendHeartbeat();

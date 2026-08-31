@@ -14,7 +14,7 @@ public class SseEventService {
     private final List<SseEmitter> emitters = new CopyOnWriteArrayList<>();
 
     public SseEmitter subscribe() {
-        SseEmitter emitter = new SseEmitter(300_000L); // 5 minute keepalive; prevents broken-pipe on stale connections
+        SseEmitter emitter = new SseEmitter(0L);
         emitters.add(emitter);
 
         emitter.onCompletion(() -> emitters.remove(emitter));

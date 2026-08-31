@@ -57,7 +57,7 @@ export default function Monitoring() {
   }, [aiBaseUrl]);
 
   useEffect(() => {
-    if (!cameraStatus.captureActive) {
+    if (!cameraStatus.captureActive || !cameraStatus.hasPreview) {
       setPreviewLoaded(false);
       setPreviewUrl('');
       return;
@@ -74,7 +74,7 @@ export default function Monitoring() {
     const timer = setInterval(refreshPreview, 200);
 
     return () => clearInterval(timer);
-  }, [cameraStatus.captureActive, aiBaseUrl]);
+  }, [cameraStatus.captureActive, cameraStatus.hasPreview, aiBaseUrl]);
 
   useEffect(() => {
     const latest = events[0];

@@ -13,6 +13,11 @@ class Settings(BaseSettings):
     face_matching_timeout_ms: int = 20_000
     max_image_bytes: int = 5 * 1024 * 1024
 
+    ai_service_host: str = "0.0.0.0"
+    ai_service_port: int = 8000
+    ai_discovery_port: int = 4211
+    ai_service_reload: bool = False
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",
