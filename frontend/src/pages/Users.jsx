@@ -77,8 +77,8 @@ export default function Users() {
       .then(([logs, settings]) => {
         if (cancelled) return;
         setUserLogs(logs);
-        setDayOffs(Array.isArray(settings.day_offs) ? settings.day_offs : []);
-        setWeeklyDayOffs(Array.isArray(settings.weekly_day_offs) ? settings.weekly_day_offs : [0, 6]);
+        setDayOffs(Array.isArray(settings['attendance.dayOffs']) ? settings['attendance.dayOffs'] : []);
+        setWeeklyDayOffs(Array.isArray(settings['attendance.weeklyDayOffs']) ? settings['attendance.weeklyDayOffs'] : [0, 6]);
       })
       .catch(() => { if (!cancelled) setUserLogsError('Không thể tải lịch sử điểm danh.'); })
       .finally(() => { if (!cancelled) setUserLogsLoading(false); });

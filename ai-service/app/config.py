@@ -8,10 +8,14 @@ class Settings(BaseSettings):
     supabase_service_key: str
     internal_api_key: str
 
-    face_similarity_threshold_percent: float = 30.0
-    capture_liveness_timeout_ms: int = 25_000
-    face_matching_timeout_ms: int = 20_000
+    capture_liveness_timeout_ms: int = 10_000
+    face_matching_timeout_ms: int = 5_000
     max_image_bytes: int = 5 * 1024 * 1024
+
+    ai_service_host: str = "0.0.0.0"
+    ai_service_port: int = 8000
+    ai_discovery_port: int = 4211
+    ai_service_reload: bool = False
 
     model_config = SettingsConfigDict(
         env_file=".env",

@@ -64,11 +64,13 @@ enum class FeedbackState : uint8_t {
   IDLE, 
   PROCESSING,
   RFID_INVALID,
+  FACE_NOT_ENROLLED,
   CAMERA_OFFLINE,
   CAPTURE_TIMEOUT,
   LIVENESS_FAILED,
   FACE_BELOW_THRESHOLD,
   FACE_MATCH_TIMEOUT,
+  MULTIPLE_FACES,
   ALREADY_CHECKED_IN,
   CHECK_IN_ON_TIME,
   CHECK_IN_LATE,
@@ -87,6 +89,7 @@ unsigned long lastHeartbeatMs    = 0UL;
 
 String lastScannedUid;
 bool enrollmentMode = false;
+volatile bool rfidRequestInProgress = false;
 unsigned long lastEnrollmentPollMs = 0UL;
 bool rfidReady = false;
 
@@ -142,6 +145,10 @@ void showFeedbackOnOled(FeedbackState state) {
       showOled("THAT BAI", "THE KHONG HOP LE");
       break;
 
+    case FeedbackState::FACE_NOT_ENROLLED:
+      showOled("THAT BAI", "CHUA DANG KY MAT");
+      break;
+
     case FeedbackState::CAMERA_OFFLINE:
       showOled("THAT BAI", "CAMERA OFFLINE");
       break;
@@ -160,6 +167,10 @@ void showFeedbackOnOled(FeedbackState state) {
 
     case FeedbackState::FACE_MATCH_TIMEOUT:
       showOled("THAT BAI", "FACE TIMEOUT");
+      break;
+
+    case FeedbackState::MULTIPLE_FACES:
+      showOled("THAT BAI", "NHIEU KHUON MAT");
       break;
 
     case FeedbackState::ALREADY_CHECKED_IN:
@@ -256,6 +267,35 @@ IPAddress workingNetworkIp(0, 0, 0, 0);
 
 constexpr uint16_t DISCOVERY_PORT = 4210;
 
+bool readDiscoveryResponse(
+    WiFiUDP& udp,
+    IPAddress& outIp,
+    uint16_t& outPort,
+    unsigned long timeoutMs) {
+  const unsigned long deadline = millis() + timeoutMs;
+  while ((long)(deadline - millis()) > 0) {
+    int size = udp.parsePacket();
+    if (size > 0) {
+      char response[64] = {};
+      int read = udp.read(response, sizeof(response) - 1);
+      if (read > 0 && strncmp(response, "ATTENDANCE_SERVER_V1:", 21) == 0) {
+        outIp = udp.remoteIP();
+        outPort = static_cast<uint16_t>(atoi(response + 21));
+        return outPort > 0;
+      }
+    }
+    delay(5);
+  }
+  return false;
+}
+
+void sendDiscoveryRequest(WiFiUDP& udp, const IPAddress& target) {
+  const char request[] = "ATTENDANCE_DISCOVER_V1";
+  udp.beginPacket(target, DISCOVERY_PORT);
+  udp.write(reinterpret_cast<const uint8_t*>(request), sizeof(request) - 1);
+  udp.endPacket();
+}
+
 bool discoverServer(IPAddress& outIp, uint16_t& outPort) {
   WiFiUDP udp;
   if (!udp.begin(0)) return false;
@@ -267,27 +307,27 @@ bool discoverServer(IPAddress& outIp, uint16_t& outPort) {
       localIp[1] | static_cast<uint8_t>(~mask[1]),
       localIp[2] | static_cast<uint8_t>(~mask[2]),
       localIp[3] | static_cast<uint8_t>(~mask[3]));
-  const char request[] = "ATTENDANCE_DISCOVER_V1";
-
   for (int attempt = 0; attempt < 3; attempt++) {
-    udp.beginPacket(broadcast, DISCOVERY_PORT);
-    udp.write(reinterpret_cast<const uint8_t*>(request), sizeof(request) - 1);
-    udp.endPacket();
+    sendDiscoveryRequest(udp, broadcast);
+    if (readDiscoveryResponse(udp, outIp, outPort, 700)) {
+      udp.stop();
+      return true;
+    }
+  }
 
-    const unsigned long deadline = millis() + 700;
-    while ((long)(deadline - millis()) > 0) {
-      int size = udp.parsePacket();
-      if (size > 0) {
-        char response[64] = {};
-        int read = udp.read(response, sizeof(response) - 1);
-        if (read > 0 && strncmp(response, "ATTENDANCE_SERVER_V1:", 21) == 0) {
-          outIp = udp.remoteIP();
-          outPort = static_cast<uint16_t>(atoi(response + 21));
-          udp.stop();
-          return outPort > 0;
-        }
+  // Phone hotspots may block broadcast but still allow direct client traffic.
+  if (mask[0] == 255 && mask[1] == 255 && mask[2] == 255) {
+    const uint8_t firstHost = (localIp[3] & mask[3]) + 1;
+    const uint8_t lastHost = (localIp[3] | static_cast<uint8_t>(~mask[3])) - 1;
+    Serial.println("[DISCOVERY] Broadcast bi chan, dang quet subnet...");
+
+    for (uint16_t host = firstHost; host <= lastHost; host++) {
+      if (host == localIp[3]) continue;
+      sendDiscoveryRequest(udp, IPAddress(localIp[0], localIp[1], localIp[2], host));
+      if (readDiscoveryResponse(udp, outIp, outPort, 40)) {
+        udp.stop();
+        return true;
       }
-      delay(10);
     }
   }
 
@@ -333,6 +373,7 @@ String getApiBase() {
 // ----------------------------------------------------------------------------
 
 void sendHeartbeat() {
+  if (rfidRequestInProgress) return;
   if (millis() - lastHeartbeatMs < HEARTBEAT_INTERVAL_MS) return;
   lastHeartbeatMs = millis();
   
@@ -348,6 +389,11 @@ void sendHeartbeat() {
 }
 
 void sendHelpRequest() {
+  if (rfidRequestInProgress) {
+    startFeedback(FeedbackState::PROCESSING);
+    return;
+  }
+
   const String apiBase = getApiBase();
   if (apiBase.length() == 0 || !connectToWifi()) {
     startFeedback(FeedbackState::CLOUD_WRITE_FAILED);
@@ -384,6 +430,7 @@ void sendHelpRequest() {
 }
 
 void pollEnrollmentCommand() {
+  if (rfidRequestInProgress) return;
   if (millis() - lastEnrollmentPollMs < ENROLLMENT_POLL_MS || WiFi.status() != WL_CONNECTED) return;
   lastEnrollmentPollMs = millis();
 
@@ -438,14 +485,23 @@ void sendRfidScanTask(void *pvParameters) {
 
   const String apiBase = getApiBase();
   if (apiBase.length() == 0 || !connectToWifi()) {
+    Serial.println("[RFID HTTP] WiFi or API base unavailable");
     startFeedback(FeedbackState::CLOUD_WRITE_FAILED);
+    rfidRequestInProgress = false;
     vTaskDelete(NULL);
     return;
   }
 
+  WiFiClient client;
   HTTPClient http;
   String url = apiBase + "/devices/" + kDeviceId + "/rfid-scans";
-  http.begin(url);
+  if (!http.begin(client, url)) {
+    Serial.printf("[RFID HTTP] Invalid URL: %s\n", url.c_str());
+    startFeedback(FeedbackState::CLOUD_WRITE_FAILED);
+    rfidRequestInProgress = false;
+    vTaskDelete(NULL);
+    return;
+  }
   http.addHeader("Content-Type", "application/json");
 
   JsonDocument doc;
@@ -457,11 +513,15 @@ void sendRfidScanTask(void *pvParameters) {
   serializeJson(doc, payload);
 
   http.setTimeout(50000); // Allow time for face match
+  Serial.printf("[RFID HTTP] POST %s\n", url.c_str());
   int code = http.POST(payload);
+  String responseBody = code > 0 ? http.getString() : http.errorToString(code);
+  Serial.printf("[RFID HTTP] Status: %d\n", code);
+  Serial.println(responseBody);
   
   if (code > 0) {
     JsonDocument resp;
-    deserializeJson(resp, http.getString());
+    deserializeJson(resp, responseBody);
     String errorCode = resp["errorCode"].as<String>();
     
     if (code == 200 || code == 201) {
@@ -483,13 +543,21 @@ void sendRfidScanTask(void *pvParameters) {
     startFeedback(FeedbackState::CLOUD_WRITE_FAILED);
   }
   http.end();
+  rfidRequestInProgress = false;
   vTaskDelete(NULL);
 }
 
 void sendRfidScan(const String& uid) {
+  if (rfidRequestInProgress) return;
+  rfidRequestInProgress = true;
   startFeedback(FeedbackState::PROCESSING);
   String* uidPtr = new String(uid);
-  xTaskCreate(sendRfidScanTask, "rfid_scan", 8192, uidPtr, 1, NULL);
+  if (uidPtr == nullptr || xTaskCreate(sendRfidScanTask, "rfid_scan", 8192, uidPtr, 1, NULL) != pdPASS) {
+    delete uidPtr;
+    rfidRequestInProgress = false;
+    startFeedback(FeedbackState::CLOUD_WRITE_FAILED);
+    Serial.println("[RFID HTTP] Could not start request task");
+  }
 }
 
 // ----------------------------------------------------------------------------
@@ -516,50 +584,51 @@ void updateFeedback() {
       buzz = (elapsed < 100);
       duration = 60000UL; // Up to 60s for face match timeout
       break;
-    case FeedbackState::RFID_INVALID:
-      // red LED + short beep (100ms)
-      r_led = true;
-      buzz = (elapsed < 100);
-      break;
+
+    // ===== TẤT CẢ LỖI -> ĐỎ =====
+    case FeedbackState::RFID_INVALID:           // UID không có trong DB
+    case FeedbackState::FACE_NOT_ENROLLED:      // Chưa enroll face
     case FeedbackState::CAMERA_OFFLINE:
     case FeedbackState::CAPTURE_TIMEOUT:
     case FeedbackState::LIVENESS_FAILED:
     case FeedbackState::FACE_MATCH_TIMEOUT:
-      // red LED + 2 beeps (100ms on, 100ms off, 100ms on)
+    case FeedbackState::MULTIPLE_FACES:         // Đa khuôn mặt
       r_led = true;
-      buzz = (elapsed < 100) || (elapsed >= 200 && elapsed < 300);
+      buzz = (elapsed < 100) || (elapsed >= 200 && elapsed < 300); // 2 beep ngắn
       break;
-    case FeedbackState::FACE_BELOW_THRESHOLD:
-      // red LED + long beep (1000ms)
+
+    case FeedbackState::FACE_BELOW_THRESHOLD:   // Sai khuôn mặt
       r_led = true;
-      buzz = (elapsed < 1000);
+      buzz = (elapsed < 1000);                  // 1 beep dài
       break;
+
+    // ===== THÀNH CÔNG -> XANH =====
     case FeedbackState::ALREADY_CHECKED_IN:
-      // green blink / special pattern
-      g_led = (elapsed % 500) < 250;
+      g_led = (elapsed % 500) < 250;            // Xanh nháy
       duration = 2000UL;
       break;
+
     case FeedbackState::CHECK_IN_ON_TIME:
-      // green LED + short beep
       g_led = true;
-      buzz = (elapsed < 100);
+      buzz = (elapsed < 100);                   // 1 beep ngắn
       break;
+
     case FeedbackState::CHECK_IN_LATE:
-      // green LED + 2 short beeps
       g_led = true;
-      buzz = (elapsed < 100) || (elapsed >= 200 && elapsed < 300);
+      buzz = (elapsed < 100) || (elapsed >= 200 && elapsed < 300); // 2 beep ngắn
       break;
+
     case FeedbackState::CLOUD_WRITE_FAILED:
-      // red LED + error beep
       r_led = true;
-      buzz = (elapsed < 500); // 500ms beep
+      buzz = (elapsed < 500);                   // Beep dài 500ms
       break;
+
     case FeedbackState::INCIDENT_RECORDED:
-      // confirm LED
       g_led = true;
       buzz = (elapsed < 100);
       duration = 1000UL;
       break;
+
     default:
       break;
   }
@@ -648,12 +717,14 @@ void handleButton() {
   if ((millis() - lastButtonChangeMs) > BUTTON_DEBOUNCE_MS && reading != lastStableButtonState) {
     lastStableButtonState = reading;
     if (reading == LOW) { // Pressed
-      tone(BUZZER_PIN, 1000);
+      tone(BUZZER_PIN, 3000);
       if (millis() - lastButtonPressMs >= BUTTON_COOLDOWN_MS) {
         lastButtonPressMs = millis();
         Serial.println("[BUTTON] Help requested");
         sendHelpRequest();
       }
+      delay(2000);
+      noTone(BUZZER_PIN);
     }
   }
 }

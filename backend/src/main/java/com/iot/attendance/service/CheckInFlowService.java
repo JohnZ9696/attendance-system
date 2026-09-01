@@ -31,18 +31,20 @@ public class CheckInFlowService {
     private final FastApiClient fastApiClient;
     private final AttendanceLogRepository attendanceLogRepository;
     private final AttendanceService attendanceService;
+    private final SettingsService settingsService;
     private final SseEventService sseEventService;
     private final ParentNotificationService parentNotificationService;
 
     @Value("${attendance.camera-id:cam-01}")
     private String cameraId;
 
-    public CheckInFlowService(StudentRepository studentRepository, VerificationLogRepository verificationLogRepository, FastApiClient fastApiClient, AttendanceLogRepository attendanceLogRepository, AttendanceService attendanceService, SseEventService sseEventService, ParentNotificationService parentNotificationService) {
+    public CheckInFlowService(StudentRepository studentRepository, VerificationLogRepository verificationLogRepository, FastApiClient fastApiClient, AttendanceLogRepository attendanceLogRepository, AttendanceService attendanceService, SettingsService settingsService, SseEventService sseEventService, ParentNotificationService parentNotificationService) {
         this.studentRepository = studentRepository;
         this.verificationLogRepository = verificationLogRepository;
         this.fastApiClient = fastApiClient;
         this.attendanceLogRepository = attendanceLogRepository;
         this.attendanceService = attendanceService;
+        this.settingsService = settingsService;
         this.sseEventService = sseEventService;
         this.parentNotificationService = parentNotificationService;
     }
@@ -64,9 +66,15 @@ public class CheckInFlowService {
         verificationLog = verificationLogRepository.save(verificationLog);
 
         try {
-            var response = fastApiClient.requestFaceVerification(verificationLog.getId(), student.getId(), cameraId).block();
+            int similarityThresholdPercent = settingsService.getSimilarityThresholdPercent();
+            var response = fastApiClient.requestFaceVerification(
+                    verificationLog.getId(),
+                    student.getId(),
+                    cameraId,
+                    similarityThresholdPercent
+            ).block();
             log.info("[VERIFICATION RESULT] {}", response.result());
-            String finalResult = complete(verificationLog.getId(), response);
+            String finalResult = complete(verificationLog.getId(), response, similarityThresholdPercent);
             
             AttendanceLog attendance = attendanceLogRepository.findByVerification_Id(verificationLog.getId()).orElse(null);
             
@@ -93,7 +101,7 @@ public class CheckInFlowService {
     }
 
     @Transactional
-    public String complete(UUID verificationId, CvVerificationResponse response) {
+    public String complete(UUID verificationId, CvVerificationResponse response, int similarityThresholdPercent) {
         VerificationLog log = verificationLogRepository.findById(verificationId)
                 .orElseThrow(() -> new IllegalArgumentException("VERIFICATION_NOT_FOUND"));
 
@@ -101,19 +109,23 @@ public class CheckInFlowService {
             return log.getResult().name();
         }
 
-        log.setResult(response.result());
+        validateCvResponse(log, response, similarityThresholdPercent);
+        VerificationResult mappedResult = decideVerificationResult(response, similarityThresholdPercent);
+        String failureReason = failureReasonFor(mappedResult, response.failureReason());
+        
+        log.setResult(mappedResult);
         log.setSimilarityPercent(BigDecimal.valueOf(response.similarityPercent()));
         log.setLivenessPassed(response.livenessPassed());
-        log.setFailureReason(response.failureReason());
+        log.setFailureReason(failureReason);
         log.setModelName(response.modelName());
         log.setModelVersion(response.modelVersion());
         log.setCompletedAt(OffsetDateTime.now());
         verificationLogRepository.save(log);
 
-        String resultName = response.result().name();
-        String message = response.failureReason();
+        String resultName = mappedResult.name();
+        String message = failureReason;
 
-        if (response.result() == VerificationResult.VERIFIED) {
+        if (mappedResult == VerificationResult.VERIFIED) {
             try {
                 var attendanceLog = attendanceService.recordAttendance(log.getStudent(), log);
                 message = "Diem danh thanh cong";
@@ -154,6 +166,7 @@ public class CheckInFlowService {
         event.put("result", resultName);
         event.put("message", message);
         event.put("similarityPercent", response.similarityPercent());
+        event.put("thresholdPercent", similarityThresholdPercent);
         event.put("livenessPassed", response.livenessPassed());
 
         sseEventService.publishEvent("verification_update", event);
@@ -178,5 +191,73 @@ public class CheckInFlowService {
                 sseEventService.publishEvent("verification_update", event);
             }
         });
+    }
+
+    private VerificationResult mapFailureReason(VerificationResult fastApiResult, String failureReason) {
+        if (failureReason == null) {
+            return fastApiResult;
+        }
+        
+        return switch (failureReason) {
+            case "MULTIPLE_FACES" -> VerificationResult.MULTIPLE_FACES;
+            case "SIMILARITY_BELOW_THRESHOLD" -> VerificationResult.FACE_BELOW_THRESHOLD;
+            case "OPEN_CLOSED_OPEN_BLINK_NOT_COMPLETED" -> VerificationResult.LIVENESS_FAILED;
+            case "NO_FACE_IN_CAPTURE_WINDOW" -> VerificationResult.CAPTURE_TIMEOUT;
+            case "NO_FRESH_CAMERA_FRAME" -> VerificationResult.CAMERA_OFFLINE;
+            case "FACE_MODEL_TIMEOUT", "NO_VALID_FACE_FOR_MATCHING" -> VerificationResult.FACE_MATCH_TIMEOUT;
+            case "FACE_PROFILE_NOT_FOUND_OR_INACTIVE" -> VerificationResult.FACE_NOT_ENROLLED;
+            default -> fastApiResult;
+        };
+    }
+
+    private VerificationResult decideVerificationResult(
+            CvVerificationResponse response,
+            int similarityThresholdPercent
+    ) {
+        VerificationResult fastApiResult = mapFailureReason(response.result(), response.failureReason());
+        boolean comparisonCompleted = fastApiResult == VerificationResult.VERIFIED
+                || fastApiResult == VerificationResult.FACE_BELOW_THRESHOLD;
+
+        if (!comparisonCompleted) {
+            return fastApiResult;
+        }
+        if (!Boolean.TRUE.equals(response.livenessPassed())) {
+            return VerificationResult.LIVENESS_FAILED;
+        }
+        if (response.similarityPercent() < similarityThresholdPercent) {
+            return VerificationResult.FACE_BELOW_THRESHOLD;
+        }
+        return VerificationResult.VERIFIED;
+    }
+
+    private void validateCvResponse(
+            VerificationLog verificationLog,
+            CvVerificationResponse response,
+            int similarityThresholdPercent
+    ) {
+        boolean correlationMatches = response != null
+                && verificationLog.getId().equals(response.verificationSessionId())
+                && verificationLog.getStudent().getId().equals(response.expectedUserId())
+                && cameraId.equals(response.cameraId());
+        boolean scoreIsValid = response != null
+                && response.similarityPercent() != null
+                && response.similarityPercent() >= 0
+                && response.similarityPercent() <= 100;
+        boolean thresholdMatches = response != null
+                && response.thresholdPercent() != null
+                && Math.abs(response.thresholdPercent() - similarityThresholdPercent) < 0.001;
+
+        if (!correlationMatches || !scoreIsValid || !thresholdMatches) {
+            throw new IllegalStateException("INVALID_CV_VERIFICATION_RESPONSE");
+        }
+    }
+
+    private String failureReasonFor(VerificationResult result, String fastApiFailureReason) {
+        return switch (result) {
+            case VERIFIED -> null;
+            case LIVENESS_FAILED -> "OPEN_CLOSED_OPEN_BLINK_NOT_COMPLETED";
+            case FACE_BELOW_THRESHOLD -> "SIMILARITY_BELOW_THRESHOLD";
+            default -> fastApiFailureReason;
+        };
     }
 }

@@ -1,9 +1,15 @@
 #include <Arduino.h>
 #include <HTTPClient.h>
 #include <WiFi.h>
+#include <WiFiUdp.h>
 #include <esp_camera.h>
 
+#include "../secrets.h"
+#ifndef WIFI_SSID
 #include "secrets.example.h"
+#endif
+
+
 
 // AI-Thinker ESP32-CAM pin map.
 #define PWDN_GPIO_NUM 32
@@ -24,6 +30,7 @@
 #define PCLK_GPIO_NUM 22
 
 constexpr char CAMERA_ID[] = "cam-01";
+constexpr uint16_t AI_DISCOVERY_PORT = 4211;
 constexpr unsigned long COMMAND_POLL_INTERVAL_MS = 500;
 constexpr unsigned long FRAME_INTERVAL_MS = 300;        // khi đang xác thực (≈3.3 FPS)
 constexpr unsigned long PREVIEW_FRAME_INTERVAL_MS = 2000; // preview mode (0.5 FPS)
@@ -33,9 +40,105 @@ unsigned long lastCommandPollMs = 0;
 unsigned long lastFrameMs = 0;
 unsigned long lastWiFiRetryMs = 0;
 bool captureRequested = false;
+String aiServiceBaseUrl = AI_SERVICE_BASE_URL;
+uint8_t transportFailureCount = 0;
 
 String cameraUrl(const char* endpoint) {
-  return String(AI_SERVICE_BASE_URL) + "/internal/v1/cameras/" + CAMERA_ID + endpoint;
+  return aiServiceBaseUrl + "/internal/v1/cameras/" + CAMERA_ID + endpoint;
+}
+
+bool readDiscoveryResponse(
+    WiFiUDP& udp,
+    IPAddress& serverIp,
+    uint16_t& serverPort,
+    unsigned long timeoutMs) {
+  constexpr char RESPONSE_PREFIX[] = "ATTENDANCE_AI_SERVER_V1:";
+  const unsigned long deadline = millis() + timeoutMs;
+
+  while (static_cast<long>(deadline - millis()) > 0) {
+    if (udp.parsePacket() > 0) {
+      char response[64] = {};
+      const int bytesRead = udp.read(response, sizeof(response) - 1);
+      if (bytesRead > 0 && strncmp(response, RESPONSE_PREFIX, strlen(RESPONSE_PREFIX)) == 0) {
+        const long port = strtol(response + strlen(RESPONSE_PREFIX), nullptr, 10);
+        if (port > 0 && port <= 65535) {
+          serverIp = udp.remoteIP();
+          serverPort = static_cast<uint16_t>(port);
+          return true;
+        }
+      }
+    }
+    delay(5);
+  }
+
+  return false;
+}
+
+void sendDiscoveryRequest(WiFiUDP& udp, const IPAddress& target) {
+  constexpr char REQUEST[] = "ATTENDANCE_AI_DISCOVER_V1";
+  udp.beginPacket(target, AI_DISCOVERY_PORT);
+  udp.write(reinterpret_cast<const uint8_t*>(REQUEST), sizeof(REQUEST) - 1);
+  udp.endPacket();
+}
+
+bool discoverAiService() {
+  WiFiUDP udp;
+  if (!udp.begin(0)) {
+    return false;
+  }
+
+  const IPAddress localIp = WiFi.localIP();
+  const IPAddress mask = WiFi.subnetMask();
+  const IPAddress broadcast(
+      localIp[0] | static_cast<uint8_t>(~mask[0]),
+      localIp[1] | static_cast<uint8_t>(~mask[1]),
+      localIp[2] | static_cast<uint8_t>(~mask[2]),
+      localIp[3] | static_cast<uint8_t>(~mask[3]));
+  IPAddress serverIp;
+  uint16_t serverPort = 0;
+
+  Serial.println("[DISCOVERY] Looking for FastAPI...");
+  for (uint8_t attempt = 0; attempt < 3; attempt++) {
+    sendDiscoveryRequest(udp, broadcast);
+    if (readDiscoveryResponse(udp, serverIp, serverPort, 500)) {
+      break;
+    }
+  }
+
+  // Phone hotspots commonly block broadcast between connected clients.
+  if (serverPort == 0 && mask == IPAddress(255, 255, 255, 0)) {
+    Serial.println("[DISCOVERY] Broadcast failed, scanning subnet...");
+    for (uint16_t host = 1; host <= 254 && serverPort == 0; host++) {
+      if (host == localIp[3]) {
+        continue;
+      }
+      sendDiscoveryRequest(udp, IPAddress(localIp[0], localIp[1], localIp[2], host));
+      readDiscoveryResponse(udp, serverIp, serverPort, 8);
+    }
+  }
+
+  udp.stop();
+  if (serverPort == 0) {
+    Serial.printf("[DISCOVERY] FastAPI not found, fallback: %s\n", aiServiceBaseUrl.c_str());
+    return false;
+  }
+
+  aiServiceBaseUrl = String("http://") + serverIp.toString() + ":" + String(serverPort);
+  Serial.printf("[DISCOVERY] FastAPI: %s\n", aiServiceBaseUrl.c_str());
+  return true;
+}
+
+void handleHttpResult(int statusCode) {
+  if (statusCode >= 0) {
+    transportFailureCount = 0;
+    return;
+  }
+
+  transportFailureCount++;
+  if (transportFailureCount >= 3) {
+    transportFailureCount = 0;
+    discoverAiService();
+  }
 }
 
 void setCaptureRequested(bool active) {
@@ -68,6 +171,7 @@ void connectWiFi() {
   if (WiFi.status() == WL_CONNECTED) {
     Serial.print("\n[WIFI] Connected: ");
     Serial.println(WiFi.localIP());
+    discoverAiService();
   } else {
     Serial.println("\n[WIFI] Connection timeout");
   }
@@ -140,6 +244,7 @@ void pollCaptureCommand() {
   }
 
   http.end();
+  handleHttpResult(statusCode);
 }
 
 void sendFrame() {
@@ -183,6 +288,7 @@ void sendFrame() {
 
   free(body);
   esp_camera_fb_return(frame);
+  handleHttpResult(statusCode);
 
   if (statusCode != HTTP_CODE_OK) {
     Serial.printf("[FRAME] Upload failed: %d\n", statusCode);

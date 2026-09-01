@@ -11,7 +11,7 @@ const dateKey = (date) => `${date.getFullYear()}-${String(date.getMonth() + 1).p
 
 export default function Settings() {
   const [cutoffTime, setCutoffTime] = useState('07:30:00');
-  const [similarityThreshold, setSimilarityThreshold] = useState(60);
+  const [similarityThreshold, setSimilarityThreshold] = useState(30);
   const [dayOffs, setDayOffs] = useState([]);
   const [weeklyDayOffs, setWeeklyDayOffs] = useState([0, 6]);
   const [calendarMonth, setCalendarMonth] = useState(() => new Date(new Date().getFullYear(), new Date().getMonth(), 1));
@@ -27,10 +27,10 @@ export default function Settings() {
     setMessage('');
     try {
       const settings = await apiClient.getSettings();
-      setCutoffTime(settings.attendance_cutoff_time || '07:30:00');
-      setSimilarityThreshold(settings.face_similarity_threshold_percent ?? 60);
-      setDayOffs(Array.isArray(settings.day_offs) ? settings.day_offs : []);
-      setWeeklyDayOffs(Array.isArray(settings.weekly_day_offs) ? settings.weekly_day_offs : [0, 6]);
+      setCutoffTime(settings['attendance.classStartTime'] || '07:30:00');
+      setSimilarityThreshold(settings['face.similarityThresholdPercent'] ?? 30);
+      setDayOffs(Array.isArray(settings['attendance.dayOffs']) ? settings['attendance.dayOffs'] : []);
+      setWeeklyDayOffs(Array.isArray(settings['attendance.weeklyDayOffs']) ? settings['attendance.weeklyDayOffs'] : [0, 6]);
     } catch {
       setMessage('Không thể tải cài đặt. Kiểm tra kết nối backend.');
     } finally {
@@ -44,14 +44,20 @@ export default function Settings() {
 
   const handleSave = async () => {
     if (!isLeadProctor) return;
+    const threshold = Number(similarityThreshold);
+    if (!Number.isInteger(threshold) || threshold < 30 || threshold > 100) {
+      toast('Độ tin cậy phải là số nguyên từ 30 đến 100%.', 'error');
+      setMessage('Độ tin cậy khuôn mặt không hợp lệ.');
+      return;
+    }
     setSaving(true);
     setMessage('');
     try {
       await apiClient.updateSettings({
-        attendance_cutoff_time: cutoffTime,
-        face_similarity_threshold_percent: Number(similarityThreshold),
-        day_offs: dayOffs,
-        weekly_day_offs: weeklyDayOffs,
+        'attendance.classStartTime': cutoffTime,
+        'face.similarityThresholdPercent': threshold,
+        'attendance.dayOffs': dayOffs,
+        'attendance.weeklyDayOffs': weeklyDayOffs,
       });
       toast('Đã lưu cài đặt thành công.', 'success');
       setMessage('Đã lưu thay đổi.');
@@ -133,13 +139,15 @@ export default function Settings() {
                 <input
                   type="number"
                   className="input"
-                  min="0"
+                  min="30"
                   max="100"
+                  step="1"
+                  required
                   value={similarityThreshold}
                   disabled={loading || !isLeadProctor}
                   onChange={(event) => setSimilarityThreshold(event.target.value)}
                 />
-                <span className="text-sm text-muted">Thấp hơn tỷ lệ này sẽ bị từ chối.</span>
+                <span className="text-sm text-muted">Có thể đặt từ 30–100%. Thấp hơn tỷ lệ này sẽ bị từ chối.</span>
               </div>
             </div>
           </div>

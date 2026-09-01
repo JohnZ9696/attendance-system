@@ -7,7 +7,6 @@ import time
 
 import numpy as np
 
-from app.config import get_settings
 from app.models import (
     VerificationRequest,
     VerificationResponse,
@@ -21,9 +20,6 @@ from app.services.face_recognition import (
 )
 from app.services.liveness import BlinkDetector
 from app.services.supabase_client import get_student_embedding
-
-
-settings = get_settings()
 
 
 @dataclass
@@ -168,7 +164,7 @@ def _response(
         cameraId=request.cameraId,
         result=result,
         similarityPercent=round(similarity, 2),
-        thresholdPercent=settings.face_similarity_threshold_percent,
+        thresholdPercent=request.similarityThresholdPercent,
         livenessPassed=liveness,
         modelName=MODEL_NAME,
         modelVersion=MODEL_VERSION,
@@ -304,7 +300,7 @@ async def run_verification(request: VerificationRequest) -> VerificationResponse
                 )
                 best_similarity = max(best_similarity, similarity)
 
-                if best_similarity >= settings.face_similarity_threshold_percent:
+                if best_similarity >= request.similarityThresholdPercent:
                     return _response(
                         request,
                         VerificationResultEnum.VERIFIED,
