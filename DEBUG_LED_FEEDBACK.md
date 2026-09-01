@@ -14,7 +14,7 @@
 | **UID chưa đăng ký khuôn mặt** | `FACE_NOT_ENROLLED` | 🔴 Đỏ | 1 beep ngắn | Sinh viên có thẻ nhưng chưa enroll face |
 | **Nhận diện đa khuôn mặt** | `MULTIPLE_FACES` | 🔴 Đỏ | 2 beep ngắn | Camera thấy >1 khuôn mặt trong khung hình |
 | **Liveness thất bại (không nháy mắt)** | `LIVENESS_FAILED` / `OPEN_CLOSED_OPEN_BLINK_NOT_COMPLETED` | 🔴 Đỏ | 2 beep ngắn | Không hoàn thành chuỗi mở-nhắm-mở mắt |
-| **Khuôn mặt không khớp (similarity < 30%)** | `FACE_BELOW_THRESHOLD` / `SIMILARITY_BELOW_THRESHOLD` | 🔴 Đỏ | 1 beep dài | Sai người / khuôn mặt không giống đăng ký |
+| **Khuôn mặt không khớp (dưới ngưỡng quản trị, tối thiểu 30%)** | `FACE_BELOW_THRESHOLD` / `SIMILARITY_BELOW_THRESHOLD` | 🔴 Đỏ | 1 beep dài | Sai người / khuôn mặt không giống đăng ký |
 | **Hết thời gian chụp / không thấy mặt** | `CAPTURE_TIMEOUT` / `NO_FACE_IN_CAPTURE_WINDOW` | 🔴 Đỏ | 2 beep ngắn | Camera không nhận diện được mặt trong thời gian cho phép |
 | **Camera offline** | `CAMERA_OFFLINE` / `NO_FRESH_CAMERA_FRAME` | 🔴 Đỏ | 2 beep ngắn | ESP32-CAM không gửi frame |
 | **Hết thời gian so khớp** | `FACE_MATCH_TIMEOUT` / `FACE_MODEL_TIMEOUT` | 🔴 Đỏ | 2 beep ngắn | Quá lâu không tìm thấy khuôn mặt hợp lệ |
@@ -133,7 +133,7 @@ void updateFeedback() {
 | `FACE_NOT_ENROLLED` | `student.face_embedding` null/empty | 422 |
 | `MULTIPLE_FACES` | FastAPI detect >1 face trong frame | 422 |
 | `LIVENESS_FAILED` | Không hoàn thành blink sequence | 422 |
-| `FACE_BELOW_THRESHOLD` | Similarity < 30% | 422 |
+| `FACE_BELOW_THRESHOLD` | Similarity thấp hơn ngưỡng quản trị (30-100%) | 422 |
 | `CAPTURE_TIMEOUT` | Không thấy face trong `captureTimeoutMs` | 422 |
 | `CAMERA_OFFLINE` | ESP32-CAM không gửi frame | 422 |
 | `FACE_MATCH_TIMEOUT` | Hết `matchTimeoutMs` chưa match được | 422 |
@@ -142,7 +142,7 @@ void updateFeedback() {
 
 ---
 
-### 3. FastAPI - Trả về error codes
+### 3. FastAPI - Trả về kết quả CV
 
 **`verification_manager.py`:**
 
@@ -160,11 +160,14 @@ if blink_frame is None:
     return _response(request, VerificationResultEnum.CAPTURE_TIMEOUT,
         reason="NO_FACE_IN_CAPTURE_WINDOW")
 
-# FACE_BELOW_THRESHOLD
-if best_similarity < settings.face_similarity_threshold_percent:
+# FACE_BELOW_THRESHOLD (ngưỡng do Spring Boot truyền từ cấu hình quản trị)
+if best_similarity < request.similarityThresholdPercent:
     return _response(request, VerificationResultEnum.FACE_BELOW_THRESHOLD,
         similarity=best_similarity, liveness=True, reason="SIMILARITY_BELOW_THRESHOLD")
 ```
+
+Spring Boot kiểm tra lại `similarityPercent`, ngưỡng của phiên và `livenessPassed`
+trước khi quyết định ghi điểm danh. FastAPI không ghi dữ liệu điểm danh.
 
 ---
 

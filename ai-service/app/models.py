@@ -26,8 +26,9 @@ class VerificationRequest(BaseModel):
     sessionId: UUID
     expectedUserId: UUID
     cameraId: str = Field(min_length=1, max_length=100)
-    captureTimeoutMs: int = Field(default=25_000, ge=1_000, le=45_000)
-    matchTimeoutMs: int = Field(default=20_000, ge=1_000, le=30_000)
+    captureTimeoutMs: int = Field(default=10_000, ge=1_000, le=45_000)
+    matchTimeoutMs: int = Field(default=5_000, ge=1_000, le=30_000)
+    similarityThresholdPercent: int = Field(default=30, ge=30, le=100)
 
 
 class VerificationResponse(BaseModel):

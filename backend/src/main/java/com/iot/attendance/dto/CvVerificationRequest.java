@@ -7,5 +7,6 @@ public record CvVerificationRequest(
         UUID expectedUserId,
         String cameraId,
         Integer captureTimeoutMs,
-        Integer matchTimeoutMs
+        Integer matchTimeoutMs,
+        Integer similarityThresholdPercent
 ) {}

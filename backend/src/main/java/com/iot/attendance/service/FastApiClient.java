@@ -30,8 +30,8 @@ public class FastApiClient {
             WebClient.Builder builder,
             @Value("${fastapi.url:http://127.0.0.1:8000}") String fastApiUrl,
             @Value("${fastapi.internal-api-key}") String internalApiKey,
-            @Value("${attendance.capture-liveness-timeout-ms:25000}") int captureLivenessTimeoutMs,
-            @Value("${attendance.face-matching-timeout-ms:20000}") int faceMatchingTimeoutMs
+            @Value("${attendance.capture-liveness-timeout-ms:10000}") int captureLivenessTimeoutMs,
+            @Value("${attendance.face-matching-timeout-ms:5000}") int faceMatchingTimeoutMs
     ) {
         this.webClient = builder.baseUrl(fastApiUrl).build();
         this.internalApiKey = internalApiKey;
@@ -63,14 +63,16 @@ public class FastApiClient {
     public Mono<CvVerificationResponse> requestFaceVerification(
             UUID sessionId,
             UUID expectedUserId,
-            String cameraId
+            String cameraId,
+            int similarityThresholdPercent
     ) {
         CvVerificationRequest request = new CvVerificationRequest(
                 sessionId,
                 expectedUserId,
                 cameraId,
                 captureLivenessTimeoutMs,
-                faceMatchingTimeoutMs
+                faceMatchingTimeoutMs,
+                similarityThresholdPercent
         );
 
         return webClient.post()
