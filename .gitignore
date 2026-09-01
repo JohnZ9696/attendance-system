@@ -67,5 +67,5 @@ frontend/dist-ssr/
 *.sln
 *.sw?
 .venv/
-
+.git/
 opencode.json
