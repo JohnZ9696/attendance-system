@@ -52,6 +52,7 @@ constexpr unsigned long BUTTON_DEBOUNCE_MS = 50UL;    // software debounce windo
 constexpr unsigned long BUTTON_COOLDOWN_MS = 2000UL;  // min gap between help button presses
 constexpr unsigned long CARD_COOLDOWN_MS   = 500UL;   // min gap between reads
 constexpr unsigned long ENROLLMENT_POLL_MS = 1000UL;  // backend command polling
+constexpr unsigned long NOTIFICATION_POLL_MS = 2000UL; // OLED notification polling
 constexpr unsigned long HEARTBEAT_INTERVAL_MS = 60000UL; // Heartbeat interval
 constexpr int           WIFI_TIMEOUT_S     = 15;      // max WiFi connect wait
 
@@ -91,6 +92,7 @@ String lastScannedUid;
 bool enrollmentMode = false;
 volatile bool rfidRequestInProgress = false;
 unsigned long lastEnrollmentPollMs = 0UL;
+unsigned long lastNotificationPollMs = 0UL;
 bool rfidReady = false;
 
 // ----------------------------------------------------------------------------
@@ -460,6 +462,33 @@ void pollEnrollmentCommand() {
   http.end();
 }
 
+void pollNotification() {
+  if (rfidRequestInProgress) return;
+  if (feedbackState != FeedbackState::IDLE) return;
+  if (millis() - lastNotificationPollMs < NOTIFICATION_POLL_MS || WiFi.status() != WL_CONNECTED) return;
+  lastNotificationPollMs = millis();
+
+  const String apiBase = getApiBase();
+  if (apiBase.length() == 0) return;
+
+  HTTPClient http;
+  http.begin(apiBase + "/notifications/pending");
+  http.setTimeout(2000);
+  int code = http.GET();
+
+  if (code == HTTP_CODE_OK) {
+    JsonDocument doc;
+    if (!deserializeJson(doc, http.getString())) {
+      String message = doc["message"].as<String>();
+      if (message.length() > 0) {
+        Serial.printf("[NOTIFY] %s\n", message.c_str());
+        showOled("THONG BAO", message);
+      }
+    }
+  }
+  http.end();
+}
+
 bool submitEnrollmentUid(const String& uid) {
   const String apiBase = getApiBase();
   if (apiBase.length() == 0 || !connectToWifi()) return false;
@@ -782,6 +811,7 @@ void setup() {
 void loop() {
   handleButton();
   pollEnrollmentCommand();
+  pollNotification();
   handleRfidScan();
   updateFeedback();
   sendHeartbeat();
