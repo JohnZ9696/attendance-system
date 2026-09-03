@@ -9,6 +9,8 @@
 #include <Wire.h>
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
+#include <WebServer.h>
+#include <Preferences.h>
 
 // ============================================================================
 // Pin Definitions (mandatory pinmap)
@@ -42,8 +44,10 @@ bool oledReady = false;
 constexpr char kWiFiSsid[]     = WIFI_SSID;
 constexpr char kWiFiPassword[] = WIFI_PASSWORD;
 constexpr char kDeviceId[]     = "door-01";
-
 constexpr char kMdnsHostname[] = "attendance";
+IPAddress local_IP(192, 168, 4, 1);
+IPAddress gateway(192, 168, 4, 1);
+IPAddress subnet(255, 255, 255, 0);
 
 // ============================================================================
 // Timing / Behavior constants
@@ -94,6 +98,54 @@ volatile bool rfidRequestInProgress = false;
 unsigned long lastEnrollmentPollMs = 0UL;
 unsigned long lastNotificationPollMs = 0UL;
 bool rfidReady = false;
+bool wifiOK = false;
+
+WebServer server(80);
+Preferences preferences;
+
+String ssid = "";
+String password = "";
+
+// ------------------------------------------------
+// HTML Page for the configuration portal
+// ------------------------------------------------
+const char* html_page = 
+"<!DOCTYPE html><html><head><meta name='viewport' content='width=device-width, initial-scale=1'>"
+"<style>body{font-family:Arial; margin:40px auto; max-width:400px; text-align:center;}"
+"form{background:#f3f3f3; padding:20px; border-radius:8px;}"
+"input{width:90%; padding:10px; margin:10px 0; border:1px solid #ccc; border-radius:4px;}"
+"input[type=submit]{background:#4CAF50; color:white; cursor:pointer; font-weight:bold;}</style></head>"
+"<body><h2>ESP32 Wi-Fi Config</h2>"
+"<form action='/save' method='POST'>"
+"<input type='text' name='ssid' placeholder='WiFi Name (SSID)' required><br>"
+"<input type='password' name='password' placeholder='Password'><br>"
+"<input type='submit' value='Save & Connect'>"
+"</form></body></html>";
+
+void handleRoot() {
+  server.send(200, "text/html", html_page);
+}
+
+void handleSave() {
+  if (server.hasArg("ssid")) {
+    ssid = server.arg("ssid");
+    password = server.arg("password");
+
+    // Save to flash memory (NVS)
+    preferences.begin("wifi-config", false);
+    preferences.putString("ssid", ssid);
+    preferences.putString("password", password);
+    preferences.end();
+
+    server.send(200, "text/html", "<h3>Settings saved! Reconnecting...</h3>");
+    delay(2000);
+    
+    // Attempt to connect to the new network
+    WiFi.begin(ssid.c_str(), password.c_str());
+  } else {
+    server.send(400, "text/plain", "Bad Request");
+  }
+}
 
 // ----------------------------------------------------------------------------
 // OLED helpers
@@ -218,12 +270,24 @@ bool connectToWifi() {
   if (WiFi.status() == WL_CONNECTED) return true;
 
   WiFi.persistent(false);
-  WiFi.mode(WIFI_STA);
   WiFi.setSleep(false);
   WiFi.setAutoReconnect(true);
-  WiFi.begin(kWiFiSsid, kWiFiPassword);
 
-  Serial.print("[WIFI] Connecting");
+  // load saved wifi from flash memory
+  preferences.begin("wifi-config", true);
+  ssid = preferences.getString("ssid", "");
+  password = preferences.getString("password", "");
+  preferences.end();
+
+  // If credentials exist, try connecting to the router
+  if (ssid != "") {
+    Serial.print("[WIFI] Connecting");
+    Serial.println(ssid);
+    WiFi.begin(ssid.c_str(), password.c_str());
+  } else {
+    Serial.println("[WIFI] No saved Wi-Fi credentials found");
+  }
+
   const unsigned long start = millis();
   while (WiFi.status() != WL_CONNECTED && (millis() - start) < (WIFI_TIMEOUT_S * 1000UL)) {
     delay(500);
@@ -349,6 +413,7 @@ String getApiBase() {
   uint16_t serverPort = 8080;
 
   Serial.println("[DISCOVERY] Dang tim Spring Boot qua UDP...");
+  showOled("DANG KET NOI SERVER", "Ping Spring Boot...");
   if (discoverServer(serverIp, serverPort)) {
     Serial.printf("[DISCOVERY] Server %s:%u\n", serverIp.toString().c_str(), serverPort);
   } else if (MDNS.begin(kMdnsHostname)) {
@@ -361,6 +426,7 @@ String getApiBase() {
     Serial.printf("[MDNS] attendance.local -> %s\n", serverIp.toString().c_str());
   } else {
     Serial.println("[DISCOVERY] Khong tim thay server");
+    showOled("SERVER 404", "Khong tim thay server");
     return "";
   }
 
@@ -777,42 +843,61 @@ void setup() {
   rfid.PCD_Init();
   delay(100);
 
-  const byte version = rfid.PCD_ReadRegister(MFRC522::VersionReg);
-  rfid.PCD_DumpVersionToSerial();
+  WiFi.mode(WIFI_AP_STA);
+  // Start the local Access Point
+  // Network Name: "ESP32-Config"
+  // Password: "12345678"
+  WiFi.softAPConfig(local_IP, gateway, subnet);
+  WiFi.softAP("ESP32-Config", "12345678"); 
+  Serial.print("Access Point IP: ");
+  Serial.println(WiFi.softAPIP());
+  delay(100);
 
-  rfidReady = version != 0x00 && version != 0xFF;
-  Serial.println(rfidReady);
-  if (rfidReady) {
-    rfid.PCD_AntennaOn();
-  } else {
-    Serial.println("[RFID] ERROR: Khong giao tiep duoc voi RC522");
-    Serial.println("[RFID] Kiem tra SDA=GPIO16, RST=GPIO17, SCK=18, MISO=19, MOSI=23, 3.3V va GND");
-  }
+  // Configure Web Server routes
+  server.on("/", handleRoot);
+  server.on("/save", HTTP_POST, handleSave);
+  server.begin();
+  Serial.println("Web server started.");
 
+  // check RFID
+  do {
+    const byte version = rfid.PCD_ReadRegister(MFRC522::VersionReg);
+    rfid.PCD_DumpVersionToSerial();
+  
+    rfidReady = version != 0x00 && version != 0xFF;
+    if (!rfidReady) {
+      Serial.println("[RFID] ERROR: Khong giao tiep duoc voi RC522");
+      Serial.println("[RFID] Kiem tra SDA=GPIO16, RST=GPIO17, SCK=18, MISO=19, MOSI=23, 3.3V va GND");
+    }
+  } while (!rfidReady);
+  rfid.PCD_AntennaOn();
+
+  // check wifi
   showOled("WIFI", "Dang ket noi...");
-  const bool wifiOk = connectToWifi();
-
-  if (wifiOk) {
-    showOled(
-        "WIFI OK",
-        WiFi.localIP().toString(),
-        "Dang dong bo gio"
-    );
-  } else {
+  wifiOK = connectToWifi();
+  if (wifiOK) {
+    showOled("WIFI OK", WiFi.localIP().toString(), "Dang dong bo gio");
+    showOled("SAN SANG", "Moi quet the");
+    Serial.println("RFID Attendance System ready");
+  }
+  else {
     showOled("WIFI LOI", "Kiem tra mang");
+    Serial.println("RFID Attendance System failed");
   }
 
-  syncTime();
-
-  Serial.println("RFID Attendance System ready");
-  showOled("SAN SANG", "Moi quet the");
+  // syncTime();
 }
 
 void loop() {
-  handleButton();
-  pollEnrollmentCommand();
-  pollNotification();
-  handleRfidScan();
-  updateFeedback();
-  sendHeartbeat();
+  server.handleClient();
+  if (wifiOK) {
+    handleButton();
+    pollEnrollmentCommand();
+    pollNotification();
+    handleRfidScan();
+    updateFeedback();
+    sendHeartbeat();
+  } else {
+    wifiOK = connectToWifi();
+  }
 }
