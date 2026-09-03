@@ -61,10 +61,10 @@ public class AssistanceNotificationService {
     private void sendEmail(String to, String subject, String body) {
         JavaMailSender mailSender = mailSenderProvider.getIfAvailable();
         if (mailSender == null) {
-            log.info("SMTP not configured; email would be sent to {} ({}).", to, subject);
-            return;
+            throw new IllegalStateException("SMTP_NOT_CONFIGURED");
         }
         SimpleMailMessage message = new SimpleMailMessage();
+        message.setFrom(adminEmail);
         message.setTo(to);
         message.setSubject(subject);
         message.setText(body);
