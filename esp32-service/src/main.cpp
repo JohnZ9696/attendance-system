@@ -413,7 +413,6 @@ String getApiBase() {
   uint16_t serverPort = 8080;
 
   Serial.println("[DISCOVERY] Dang tim Spring Boot qua UDP...");
-  showOled("DANG KET NOI SERVER", "Ping Spring Boot...");
   if (discoverServer(serverIp, serverPort)) {
     Serial.printf("[DISCOVERY] Server %s:%u\n", serverIp.toString().c_str(), serverPort);
   } else if (MDNS.begin(kMdnsHostname)) {
@@ -426,7 +425,6 @@ String getApiBase() {
     Serial.printf("[MDNS] attendance.local -> %s\n", serverIp.toString().c_str());
   } else {
     Serial.println("[DISCOVERY] Khong tim thay server");
-    showOled("SERVER 404", "Khong tim thay server");
     return "";
   }
 
@@ -453,6 +451,11 @@ void sendHeartbeat() {
   http.begin(url);
   http.setTimeout(3000);
   int code = http.POST("");
+  if (code > 0) {
+    Serial.printf("[HEARTBEAT] OK (Status: %d)\n", code);
+  } else {
+    Serial.printf("[HEARTBEAT] Lỗi gửi (Error: %s)\n", http.errorToString(code).c_str());
+  }
   http.end();
 }
 
@@ -876,16 +879,24 @@ void setup() {
   showOled("WIFI", "Dang ket noi...");
   wifiOK = connectToWifi();
   if (wifiOK) {
-    showOled("WIFI OK", WiFi.localIP().toString(), "Dang dong bo gio");
-    showOled("SAN SANG", "Moi quet the");
-    Serial.println("RFID Attendance System ready");
+    showOled("WIFI OK", WiFi.localIP().toString(), "Tim server...");
+    
+    // Gọi thử 1 lần để tìm server ngay lúc boot
+    String apiBase = getApiBase();
+    if (apiBase.length() > 0) {
+      showOled("SAN SANG", "Moi quet the");
+      Serial.println("RFID Attendance System ready");
+    } else {
+      showOled("SERVER LOI", "Chua tim thay server");
+      Serial.println("RFID Attendance System: Server not found yet");
+    }
   }
   else {
     showOled("WIFI LOI", "Kiem tra mang");
     Serial.println("RFID Attendance System failed");
   }
 
-  // syncTime();
+  syncTime();
 }
 
 void loop() {
