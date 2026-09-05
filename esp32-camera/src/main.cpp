@@ -7,9 +7,6 @@
 #include <Preferences.h>
 
 #include "../secrets.h"
-#ifndef WIFI_SSID
-#include "secrets.example.h"
-#endif
 
 WebServer server(80);
 Preferences preferences;
