@@ -3,11 +3,57 @@
 #include <WiFi.h>
 #include <WiFiUdp.h>
 #include <esp_camera.h>
+#include <WebServer.h>
+#include <Preferences.h>
 
 #include "../secrets.h"
 #ifndef WIFI_SSID
 #include "secrets.example.h"
 #endif
+
+WebServer server(80);
+Preferences preferences;
+
+String ssid = "";
+String password = "";
+
+const char* html_page = 
+"<!DOCTYPE html><html><head><meta name='viewport' content='width=device-width, initial-scale=1'>"
+"<style>body{font-family:Arial; margin:40px auto; max-width:400px; text-align:center;}"
+"form{background:#f3f3f3; padding:20px; border-radius:8px;}"
+"input{width:90%; padding:10px; margin:10px 0; border:1px solid #ccc; border-radius:4px;}"
+"input[type=submit]{background:#4CAF50; color:white; cursor:pointer; font-weight:bold;}</style></head>"
+"<body><h2>ESP32 Wi-Fi Config</h2>"
+"<form action='/save' method='POST'>"
+"<input type='text' name='ssid' placeholder='WiFi Name (SSID)' required><br>"
+"<input type='password' name='password' placeholder='Password'><br>"
+"<input type='submit' value='Save & Connect'>"
+"</form></body></html>";
+
+void handleRoot() {
+  server.send(200, "text/html", html_page);
+}
+
+void handleSave() {
+  if (server.hasArg("ssid")) {
+    ssid = server.arg("ssid");
+    password = server.arg("password");
+
+    // Save to flash memory (NVS)
+    preferences.begin("wifi-config", false);
+    preferences.putString("ssid", ssid);
+    preferences.putString("password", password);
+    preferences.end();
+
+    server.send(200, "text/html", "<h3>Settings saved! Reconnecting...</h3>");
+    delay(2000);
+    
+    // Attempt to connect to the new network
+    WiFi.begin(ssid.c_str(), password.c_str());
+  } else {
+    server.send(400, "text/plain", "Bad Request");
+  }
+}
 
 
 
@@ -155,13 +201,23 @@ void connectWiFi() {
     return;
   }
 
-  WiFi.mode(WIFI_STA);
   WiFi.persistent(false);
   WiFi.setAutoReconnect(true);
   WiFi.setSleep(false);
-  WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
 
-  Serial.print("[WIFI] Connecting");
+  preferences.begin("wifi-config", true);
+  ssid = preferences.getString("ssid", "");
+  password = preferences.getString("password", "");
+  preferences.end();
+
+  if (ssid != "") {
+    Serial.print("[WIFI] Connecting to ");
+    Serial.println(ssid);
+    WiFi.begin(ssid.c_str(), password.c_str());
+  } else {
+    Serial.println("[WIFI] No saved Wi-Fi credentials found");
+  }
+
   const unsigned long startedMs = millis();
   while (WiFi.status() != WL_CONNECTED && millis() - startedMs < 15000) {
     Serial.print('.');
@@ -297,6 +353,21 @@ void sendFrame() {
 
 void setup() {
   Serial.begin(115200);
+
+  WiFi.mode(WIFI_AP_STA);
+  IPAddress local_IP(192, 168, 4, 1);
+  IPAddress gateway(192, 168, 4, 1);
+  IPAddress subnet(255, 255, 255, 0);
+  WiFi.softAPConfig(local_IP, gateway, subnet);
+  WiFi.softAP("ESP32-Cam-Config", "12345678"); 
+  Serial.print("Access Point IP: ");
+  Serial.println(WiFi.softAPIP());
+
+  server.on("/", handleRoot);
+  server.on("/save", HTTP_POST, handleSave);
+  server.begin();
+  Serial.println("Web server started.");
+
   connectWiFi();
 
   if (!initCamera()) {
@@ -310,6 +381,8 @@ void setup() {
 }
 
 void loop() {
+  server.handleClient();
+
   if (WiFi.status() != WL_CONNECTED) {
     setCaptureRequested(false);
     if (millis() - lastWiFiRetryMs >= WIFI_RETRY_INTERVAL_MS) {

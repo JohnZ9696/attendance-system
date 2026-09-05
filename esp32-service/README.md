@@ -7,7 +7,7 @@ ESP32-CAM integrations.
 ## Setup
 
 1. Install PlatformIO Core or the PlatformIO IDE extension.
-2. Update the Wi-Fi credentials in `src/main.cpp` for local testing.
+2. The device features an Access Point (AP) mode for dynamic Wi-Fi configuration. When powered on, connect to the Wi-Fi network named `ESP32-Config` with the password `12345678`, and a configuration portal will be available (usually at `http://192.168.4.1`) to set your local Wi-Fi credentials without re-uploading the code.
 3. Build and upload:
 
 ```bash
