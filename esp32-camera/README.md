@@ -8,6 +8,7 @@ Copy `src/secrets.example.h` to `secrets.h` in this directory and configure
 Wi-Fi, the internal API key, and a fallback FastAPI URL. The fallback URL is
 used only when UDP discovery is unavailable.
 
+Additionally, the camera features an Access Point (AP) mode for dynamic Wi-Fi configuration. When powered on, connect to the Wi-Fi network named `ESP32-Cam-Config` with the password `12345678`, and a configuration portal will be available (usually at `http://192.168.4.1`) to set your local Wi-Fi credentials without re-uploading the code.
 ## FastAPI Discovery
 
 FastAPI listens on UDP port `4211`. After joining Wi-Fi, the camera broadcasts
