@@ -57,6 +57,11 @@ Open `.env` in your text editor and ensure you provide values for at least:
 python -m app.main
 ```
 
+for uv
+```bash
+uv run python -m app.main
+```
+
 The service listens on `http://192.168.2.26:8000`. Interactive API documentation
 is available at `http://192.168.2.26:8000/docs`.
 

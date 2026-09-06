@@ -21,7 +21,7 @@ public class AssistanceNotificationService {
 
     private final ObjectProvider<JavaMailSender> mailSenderProvider;
 
-    @Value("${attendance.admin-email:}")
+    @Value("${attendance.admin-email:minhvan9602@gmail.com}")
     private String adminEmail;
 
     public AssistanceNotificationService(ObjectProvider<JavaMailSender> mailSenderProvider) {

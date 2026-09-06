@@ -36,13 +36,9 @@ constexpr int OLED_HEIGHT = 64;
 Adafruit_SSD1306 oled(OLED_WIDTH, OLED_HEIGHT, &Wire, -1);
 bool oledReady = false;
 
-#include "wifi_config.h"
-
 // ============================================================================
 // Configuration
 // ============================================================================
-constexpr char kWiFiSsid[]     = WIFI_SSID;
-constexpr char kWiFiPassword[] = WIFI_PASSWORD;
 constexpr char kDeviceId[]     = "door-01";
 constexpr char kMdnsHostname[] = "attendance";
 IPAddress local_IP(192, 168, 4, 1);
