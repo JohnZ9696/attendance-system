@@ -21,7 +21,7 @@ create table if not exists students (
 
 create table if not exists verification_logs (
   id                 uuid primary key default gen_random_uuid(),
-  student_id         uuid references students(id),
+  student_id         uuid references students(id) on delete cascade,
   scanned_uid        text not null,
   similarity_percent numeric(5,2),
   liveness_passed    boolean,
@@ -37,8 +37,8 @@ create table if not exists verification_logs (
 
 create table if not exists attendance_logs (
   id              uuid primary key default gen_random_uuid(),
-  student_id      uuid not null references students(id),
-  verification_id uuid unique references verification_logs(id),
+  student_id      uuid not null references students(id) on delete cascade,
+  verification_id uuid unique references verification_logs(id) on delete cascade,
   attendance_date date not null,
   check_time      timestamptz not null,
   status          text not null check (status in ('ON_TIME','LATE')),
@@ -48,7 +48,7 @@ create table if not exists attendance_logs (
 
 create table if not exists assistance_requests (
   id                 uuid primary key default gen_random_uuid(),
-  student_id         uuid references students(id),
+  student_id         uuid references students(id) on delete cascade,
   source             text check (source in ('PUSH_BUTTON','WEB')),
   message            text not null,
   status             text not null check (status in ('OPEN','ACKNOWLEDGED','RESOLVED')),
