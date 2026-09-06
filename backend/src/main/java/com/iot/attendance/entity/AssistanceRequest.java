@@ -44,9 +44,8 @@ public class AssistanceRequest {
     @Column(name = "notification_error")
     private String notificationError;
 
-    @CreationTimestamp
     @Column(name = "created_at", updatable = false)
-    private OffsetDateTime createdAt;
+    private OffsetDateTime createdAt = OffsetDateTime.now();
 
     @UpdateTimestamp
     @Column(name = "updated_at")
