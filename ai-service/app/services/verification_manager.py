@@ -182,7 +182,7 @@ async def run_verification(request: VerificationRequest) -> VerificationResponse
             reason="FACE_PROFILE_NOT_FOUND_OR_INACTIVE",
         )
 
-    # Một camera chỉ xử lý một phiên tại một thời điểm.
+    # A camera processes only one session at a time
     async with get_camera_lock(request.cameraId):
         started_ms = int(time.time() * 1000)
         capture_deadline = started_ms + request.captureTimeoutMs
@@ -199,8 +199,8 @@ async def run_verification(request: VerificationRequest) -> VerificationResponse
             while int(time.time() * 1000) <= capture_deadline:
                 packets = buffer.packets_after(started_ms, last_sequence)
 
-                # MediaPipe có thể xử lý chậm hơn tốc độ ESP32-CAM gửi ảnh.
-                # Chỉ giữ một số frame mới nhất để tránh tồn hàng chục frame.
+                # MediaPipe may process images more slowly than the ESP32-CAM sends them; 
+                # keep only the most recent frames to avoid a backlog of dozens of frames.
                 if len(packets) > 4:
                     packets = packets[-4:]
 
@@ -214,7 +214,7 @@ async def run_verification(request: VerificationRequest) -> VerificationResponse
                     saw_face = saw_face or observation.face_detected
 
                     if observation.passed:
-                        # Dùng chính frame hoàn tất blink làm frame đầu tiên để so khớp.
+                        # Use the exact frame that completed the blink as the first frame for matching.
                         blink_frame = packet.frame
                         break
 
@@ -261,7 +261,7 @@ async def run_verification(request: VerificationRequest) -> VerificationResponse
                 newest_packet = packets[-1]
                 last_sequence = newest_packet.sequence
 
-                # Không cho DeepFace xử lý toàn bộ frame tồn đọng.
+                # Do not let DeepFace process all backlogged frames.
                 frames_to_match = [newest_packet.frame]
 
             while frames_to_match:

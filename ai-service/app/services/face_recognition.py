@@ -32,8 +32,8 @@ def extract_face_embedding(
     height, width = frame.shape[:2]
     gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
 
-    # Điểm tạm thời của toàn ảnh. Sau khi phát hiện khuôn mặt,
-    # giá trị này sẽ được tính lại trên riêng vùng khuôn mặt.
+    # Temporary score for the entire image. After detecting a face,
+    # this value will be recalculated specifically on the face region.
     blur_score = float(cv2.Laplacian(gray, cv2.CV_64F).var())
 
     if require_enrollment_quality and min(height, width) < 240:
@@ -80,7 +80,7 @@ def extract_face_embedding(
 
     result = results[0]
 
-    # Tính độ nét trên vùng khuôn mặt thay vì toàn bộ ảnh.
+    # Calculate sharpness on the face region instead of the entire image.
     area = result.get("facial_area") or {}
     x = max(0, int(area.get("x", 0)))
     y = max(0, int(area.get("y", 0)))
@@ -104,7 +104,7 @@ def extract_face_embedding(
         area,
     )
 
-    # Ngưỡng 50 phù hợp hơn để kiểm thử bằng ảnh web/ESP32-CAM.
+    # Threshold of 50 is more suitable for testing with web/ESP32-CAM images.
     if require_enrollment_quality and blur_score < 50.0:
         return FaceEmbeddingResult(
             None,

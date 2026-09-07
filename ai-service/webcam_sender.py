@@ -39,7 +39,7 @@ while True:
     if cv2.waitKey(1) & 0xFF == ord("q"):
         break
 
-    time.sleep(0.15)  # khoảng 6–7 frame/giây
+    time.sleep(0.15)  # about 6-7 frames/second
 
 camera.release()
 cv2.destroyAllWindows()

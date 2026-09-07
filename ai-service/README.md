@@ -10,36 +10,35 @@ First, navigate to the `ai-service` directory:
 cd ai-service
 ```
 
-### 1. Create a virtual environment
+### 1. Setup virtual environment and dependencies
 
+**Using `uv` (Recommended - much faster):**
 ```bash
+# Create virtual environment
+uv venv
+
+# Install dependencies
+uv pip install -r requirements.txt
+```
+
+**Using standard Python tools:**
+```bash
+# 1. Create virtual environment
 python -m venv .venv
-```
 
-### 2. Activate the virtual environment
-
-**On Linux/macOS:**
-```bash
+# 2. Activate it
+# On Linux/macOS:
 source .venv/bin/activate
-```
-
-**On Windows (Command Prompt):**
-```cmd
+# On Windows (Command Prompt):
 .venv\Scripts\activate.bat
-```
-
-**On Windows (PowerShell):**
-```powershell
+# On Windows (PowerShell):
 .venv\Scripts\Activate.ps1
-```
 
-### 3. Install dependencies
-
-```bash
+# 3. Install dependencies
 pip install -r requirements.txt
 ```
 
-### 4. Set up environment variables
+### 2. Set up environment variables
 
 Copy the example environment file and fill in your credentials:
 
@@ -51,19 +50,34 @@ Open `.env` in your text editor and ensure you provide values for at least:
 - `SUPABASE_URL`
 - `SUPABASE_SERVICE_KEY`
 
-### 5. Run the server
+### 3. Run the server
 
-```bash
-python -m app.main
-```
-
-for uv
+**Using `uv`:**
 ```bash
 uv run python -m app.main
 ```
 
-The service listens on `http://192.168.2.26:8000`. Interactive API documentation
-is available at `http://192.168.2.26:8000/docs`.
+**Using standard Python tools (ensure venv is activated):**
+```bash
+python -m app.main
+```
+
+The service listens on `http://0.0.0.0:8000`. Interactive API documentation
+is available at `http://0.0.0.0:8000/docs`.
+
+## Simulation
+
+If you do not have an actual ESP32-CAM device, you can use the `webcam_sender.py` script to simulate one using your computer's webcam.
+
+**Using `uv`:**
+```bash
+uv run python webcam_sender.py
+```
+
+**Using standard Python tools (ensure venv is activated):**
+```bash
+python webcam_sender.py
+```
 
 ## Endpoints
 

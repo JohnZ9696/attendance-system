@@ -61,7 +61,7 @@ def _eye_aspect_ratio(landmarks, indices) -> float:
 
 
 class BlinkDetector:
-    """Mỗi phiên xác thực tạo một detector riêng."""
+    """Each authentication session creates a dedicated detector."""
 
     def __init__(self) -> None:
         self._mesh = mp_face_mesh.FaceMesh(
