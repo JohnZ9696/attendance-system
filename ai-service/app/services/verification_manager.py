@@ -151,6 +151,18 @@ def get_camera_lock(camera_id: str) -> asyncio.Lock:
         return camera_locks[camera_id]
 
 
+# Xây dựng lại FaceMesh của MediaPipe rất tốn kém, nên giữ một detector
+# cho mỗi camera và reset() giữa các phiên thay vì tạo mới mỗi lần quét.
+camera_detectors: dict[str, BlinkDetector] = {}
+
+
+def get_blink_detector(camera_id: str) -> BlinkDetector:
+    with registry_lock:
+        if camera_id not in camera_detectors:
+            camera_detectors[camera_id] = BlinkDetector()
+        return camera_detectors[camera_id]
+
+
 def _response(
     request: VerificationRequest,
     result: VerificationResultEnum,
@@ -188,53 +200,51 @@ async def run_verification(request: VerificationRequest) -> VerificationResponse
         capture_deadline = started_ms + request.captureTimeoutMs
         first_frame_deadline = started_ms + 10000
         buffer = get_buffer(request.cameraId)
-        detector = BlinkDetector()
+        detector = get_blink_detector(request.cameraId)
+        detector.reset()
 
         last_sequence = 0
         saw_fresh_frame = False
         saw_face = False
         blink_frame: np.ndarray | None = None
 
-        try:
-            while int(time.time() * 1000) <= capture_deadline:
-                packets = buffer.packets_after(started_ms, last_sequence)
+        while int(time.time() * 1000) <= capture_deadline:
+            packets = buffer.packets_after(started_ms, last_sequence)
 
-                # MediaPipe có thể xử lý chậm hơn tốc độ ESP32-CAM gửi ảnh.
-                # Chỉ giữ một số frame mới nhất để tránh tồn hàng chục frame.
-                if len(packets) > 4:
-                    packets = packets[-4:]
+            # MediaPipe có thể xử lý chậm hơn tốc độ ESP32-CAM gửi ảnh.
+            # Chỉ giữ một số frame mới nhất để tránh tồn hàng chục frame.
+            if len(packets) > 4:
+                packets = packets[-4:]
 
-                for packet in packets:
-                    if int(time.time() * 1000) > capture_deadline:
-                        break
-
-                    last_sequence = packet.sequence
-                    saw_fresh_frame = True
-                    observation = await asyncio.to_thread(detector.update, packet.frame)
-                    saw_face = saw_face or observation.face_detected
-
-                    if observation.passed:
-                        # Dùng chính frame hoàn tất blink làm frame đầu tiên để so khớp.
-                        blink_frame = packet.frame
-                        break
-
+            for packet in packets:
                 if int(time.time() * 1000) > capture_deadline:
                     break
 
-                if blink_frame is not None:
+                last_sequence = packet.sequence
+                saw_fresh_frame = True
+                observation = await asyncio.to_thread(detector.update, packet.frame)
+                saw_face = saw_face or observation.face_detected
+
+                if observation.passed:
+                    # Dùng chính frame hoàn tất blink làm frame đầu tiên để so khớp.
+                    blink_frame = packet.frame
                     break
 
-                now_ms = int(time.time() * 1000)
-                if not saw_fresh_frame and now_ms >= first_frame_deadline:
-                    return _response(
-                        request,
-                        VerificationResultEnum.CAMERA_OFFLINE,
-                        reason="NO_FRESH_CAMERA_FRAME",
-                    )
+            if int(time.time() * 1000) > capture_deadline:
+                break
 
-                await asyncio.sleep(0.05)
-        finally:
-            detector.close()
+            if blink_frame is not None:
+                break
+
+            now_ms = int(time.time() * 1000)
+            if not saw_fresh_frame and now_ms >= first_frame_deadline:
+                return _response(
+                    request,
+                    VerificationResultEnum.CAMERA_OFFLINE,
+                    reason="NO_FRESH_CAMERA_FRAME",
+                )
+
+            await asyncio.sleep(0.05)
 
         if blink_frame is None:
             if saw_face:
